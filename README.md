@@ -31,6 +31,8 @@ git fetch template && git checkout template/v2 .github
 
 Подробнее про локальный и автоматический запуск читайте в [README автотестов](https://github.com/Yandex-Practicum/go-autotests).
 
+Установлен .exe можно запустить для этого в `cmd/shortener` выполняем `go build -o shortener.exe`, после чего в командной строке `shortenertest.exe -test.v -test.run=^TestIteration1$ -binary-path=cmd/shortener/shortener` с правильным итератором.
+
 ## Структура проекта
 
 Приведённая в этом репозитории структура проекта является рекомендуемой, но не обязательной.
