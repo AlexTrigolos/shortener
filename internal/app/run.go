@@ -1,21 +1,27 @@
 package app
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/AlexTrigolos/shortener/internal/handler"
 	"github.com/AlexTrigolos/shortener/internal/model"
 )
 
-func Run() error {
-	urls := model.NewURL()
-	mux := http.NewServeMux()
-	mux.HandleFunc(`/`, func(w http.ResponseWriter, r *http.Request) {
-		handler.Root(w, r, urls)
-	})
-	mux.HandleFunc(`/{id}`, func(w http.ResponseWriter, r *http.Request) {
-		handler.Get(w, r, urls)
-	})
+var(
+	newURL = model.NewURL
+	listenAndServe = http.ListenAndServe
+)
 
-	return http.ListenAndServe(`:8080`, mux)
+func Run() error {
+	urls, err := newURL()
+	if err != nil {
+		fmt.Println("не удалось содать урлы")
+		return err
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc(`/`, handler.RootHandler(urls))
+	mux.HandleFunc(`/{id}`, handler.GetHandler(urls))
+
+	return listenAndServe(`:8080`, mux)
 }
