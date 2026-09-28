@@ -1,16 +1,52 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/AlexTrigolos/shortener/internal/model"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	mockW    http.ResponseWriter
+	mockR    *http.Request
+	mockURL  string
+	mockCode int
+)
+
+func mockHTTPRedirect(w http.ResponseWriter, r *http.Request, url string, code int) {
+	mockW = w
+	mockR = r
+	mockURL = url
+	mockCode = code
+
+	w.Header().Set("Location", url)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(code)
+	body := "<a href=\"" + url + "\">Temporary Redirect</a>.\n"
+	fmt.Fprintln(w, body)
+}
+
 func TestGetHandler(t *testing.T) {
+	urls, err := model.NewURL()
+	require.NoError(t, err)
+
+	handler := chi.NewRouter()
+	handler.Get("/{id}", GetHandler(urls))
+	srv := httptest.NewServer(handler)
+
+	urls.Set("short.url", srv.URL)
+
+	defer srv.Close()
+
+	httpRedirect = mockHTTPRedirect
+
 	type want struct {
 		statusCode  int
 		contentType string
@@ -19,56 +55,24 @@ func TestGetHandler(t *testing.T) {
 		redirect    bool
 	}
 	tests := []struct {
-		name     string
-		keyValue [2]string
-		method   string
-		request  string
-		want     want
+		name    string
+		request string
+		want    want
 	}{
 		{
-			name:     "нашлось значение по ключу",
-			keyValue: [2]string{"short.url", "https://long.url"},
-			method:   http.MethodGet,
-			request:  "/short.url",
+			name:    "нашлось значение по ключу",
+			request: "/short.url",
 			want: want{
 				statusCode:  307,
 				contentType: "text/html; charset=utf-8",
-				response:    "<a href=\"https://long.url\">Temporary Redirect</a>.\n\n",
-				location:    "https://long.url",
+				response:    "",
+				location:    srv.URL,
 				redirect:    true,
 			},
 		},
 		{
-			name:     "вызван не тот метод",
-			keyValue: [2]string{"short.url", "https://long.url"},
-			method:   http.MethodPost,
-			request:  "/short.url",
-			want: want{
-				statusCode:  405,
-				contentType: "text/plain; charset=utf-8",
-				response:    "ожидался Get запрос\n",
-				location:    "",
-				redirect:    false,
-			},
-		},
-		{
-			name:     "не передан ключ",
-			keyValue: [2]string{"short.url", "https://long.url"},
-			method:   http.MethodGet,
-			request:  "/",
-			want: want{
-				statusCode:  400,
-				contentType: "text/plain; charset=utf-8",
-				response:    "не передан URL\n",
-				location:    "",
-				redirect:    false,
-			},
-		},
-		{
-			name:     "нет записей с таким сокращением url",
-			keyValue: [2]string{"short.url", "https://long.url"},
-			method:   http.MethodGet,
-			request:  "/unknown.url",
+			name:    "нет записей с таким сокращением url",
+			request: "/unknown.url",
 			want: want{
 				statusCode:  404,
 				contentType: "text/plain; charset=utf-8",
@@ -80,24 +84,28 @@ func TestGetHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			urls, err := model.NewURL()
-			require.NoError(t, err)
-			urls.Set(tt.keyValue[0], tt.keyValue[1])
+			client := resty.New()
+			client.SetRedirectPolicy(resty.NoRedirectPolicy()) // авторедирект делаем в ошибку
+			req := client.R()
+			req.Method = http.MethodGet
+			req.URL = srv.URL + tt.request
 
-			r := httptest.NewRequest(tt.method, tt.request, nil)
-			w := httptest.NewRecorder()
-			GetHandler(urls)(w, r)
-
-			res := w.Result()
-			assert.Equal(t, tt.want.statusCode, res.StatusCode)
-			assert.Equal(t, tt.want.contentType, res.Header.Get("Content-Type"))
-
-			assert.Equal(t, tt.want.response, w.Body.String())
+			resp, err := req.Send()
 
 			if tt.want.redirect {
-				assert.Equal(t, tt.want.location, res.Header.Get("Location"))
+				require.ErrorContains(t, err, "Get \""+tt.want.location+"\": auto redirect is disabled")
 			} else {
-				assert.Empty(t, res.Header.Get("Location"))
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.want.statusCode, resp.StatusCode())
+			assert.Equal(t, tt.want.contentType, resp.Header().Get("Content-Type"))
+			assert.Equal(t, tt.want.response, string(resp.Body()))
+
+			if tt.want.redirect {
+				assert.Equal(t, tt.want.location, resp.Header().Get("Location"))
+			} else {
+				assert.Empty(t, resp.Header().Get("Location"))
 			}
 		})
 	}

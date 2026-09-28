@@ -1,11 +1,26 @@
 package main
 
-import "github.com/AlexTrigolos/shortener/internal/app"
+import (
+	"net/http"
 
-var run = app.Run
+	"github.com/AlexTrigolos/shortener/internal/router"
+)
 
-func main() {
-	if err := run(); err != nil {
+var (
+	listenAndServe = http.ListenAndServe
+	generateRouter = router.GenerateRouter
+)
+
+func errPanic(err error) {
+	if err != nil {
 		panic(err)
 	}
+}
+
+func main() {
+	router, err := generateRouter()
+	errPanic(err)
+
+	err = listenAndServe(":8080", router)
+	errPanic(err)
 }

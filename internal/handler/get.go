@@ -2,19 +2,16 @@ package handler
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/AlexTrigolos/shortener/internal/model"
+	"github.com/go-chi/chi/v5"
 )
+
+var httpRedirect = http.Redirect
 
 func GetHandler(urls *model.URL) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "ожидался Get запрос", http.StatusMethodNotAllowed)
-			return
-		}
-
-		id := strings.Trim(r.URL.Path, "/")
+		id := chi.URLParam(r, "id")
 		if id == "" {
 			http.Error(w, "не передан URL", http.StatusBadRequest)
 			return
@@ -26,7 +23,6 @@ func GetHandler(urls *model.URL) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Location", url)
-		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+		httpRedirect(w, r, url, http.StatusTemporaryRedirect)
 	}
 }
