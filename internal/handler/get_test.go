@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	mockW    http.ResponseWriter
-	mockR    *http.Request
-	mockURL  string
-	mockCode int
+	mockW          http.ResponseWriter
+	mockR          *http.Request
+	mockURL        string
+	mockCode       int
+	flagDefaultURL = "http://flagDefaultURL.ru"
 )
 
 func mockHTTPRedirect(w http.ResponseWriter, r *http.Request, url string, code int) {
@@ -38,7 +39,7 @@ func TestGetHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	handler := chi.NewRouter()
-	handler.Get("/{id}", GetHandler(urls))
+	handler.Get("/{id}", GetHandler(urls, flagDefaultURL))
 	srv := httptest.NewServer(handler)
 
 	urls.Set("short.url", srv.URL)
@@ -47,39 +48,20 @@ func TestGetHandler(t *testing.T) {
 
 	httpRedirect = mockHTTPRedirect
 
-	type want struct {
-		statusCode  int
-		contentType string
-		response    string
-		location    string
-		redirect    bool
-	}
 	tests := []struct {
-		name    string
-		request string
-		want    want
+		name          string
+		request       string
+		wantLocation string
 	}{
 		{
-			name:    "нашлось значение по ключу",
-			request: "/short.url",
-			want: want{
-				statusCode:  307,
-				contentType: "text/html; charset=utf-8",
-				response:    "",
-				location:    srv.URL,
-				redirect:    true,
-			},
+			name:          "нашлось значение по ключу",
+			request:       "/short.url",
+			wantLocation: srv.URL,
 		},
 		{
-			name:    "нет записей с таким сокращением url",
-			request: "/unknown.url",
-			want: want{
-				statusCode:  404,
-				contentType: "text/plain; charset=utf-8",
-				response:    "404 page not found\n",
-				location:    "",
-				redirect:    false,
-			},
+			name:          "нет записей с таким сокращением url",
+			request:       "/unknown.url",
+			wantLocation: flagDefaultURL,
 		},
 	}
 	for _, tt := range tests {
@@ -92,21 +74,13 @@ func TestGetHandler(t *testing.T) {
 
 			resp, err := req.Send()
 
-			if tt.want.redirect {
-				require.ErrorContains(t, err, "Get \""+tt.want.location+"\": auto redirect is disabled")
-			} else {
-				require.NoError(t, err)
-			}
+			require.ErrorContains(t, err, "Get \""+tt.wantLocation+"\": auto redirect is disabled")
 
-			assert.Equal(t, tt.want.statusCode, resp.StatusCode())
-			assert.Equal(t, tt.want.contentType, resp.Header().Get("Content-Type"))
-			assert.Equal(t, tt.want.response, string(resp.Body()))
+			assert.Equal(t, 307, resp.StatusCode())
+			assert.Equal(t, "text/html; charset=utf-8", resp.Header().Get("Content-Type"))
+			assert.Equal(t, "", string(resp.Body()))
 
-			if tt.want.redirect {
-				assert.Equal(t, tt.want.location, resp.Header().Get("Location"))
-			} else {
-				assert.Empty(t, resp.Header().Get("Location"))
-			}
+			assert.Equal(t, tt.wantLocation, resp.Header().Get("Location"))
 		})
 	}
 }

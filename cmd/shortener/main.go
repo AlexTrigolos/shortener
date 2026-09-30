@@ -9,6 +9,7 @@ import (
 var (
 	listenAndServe = http.ListenAndServe
 	generateRouter = router.GenerateRouter
+	prsFlags       = parseFlags
 )
 
 func errPanic(err error) {
@@ -18,9 +19,10 @@ func errPanic(err error) {
 }
 
 func main() {
-	router, err := generateRouter()
+	prsFlags()
+	router, err := generateRouter(flagDefaultURL)
 	errPanic(err)
 
-	err = listenAndServe(":8080", router)
+	err = listenAndServe(flagRunAddr, router)
 	errPanic(err)
 }

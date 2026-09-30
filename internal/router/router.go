@@ -9,7 +9,7 @@ import (
 
 var newURL = model.NewURL
 
-func GenerateRouter() (chi.Router, error) {
+func GenerateRouter(flagDefaultURL string) (chi.Router, error) {
 	r := chi.NewRouter()
 
 	urls, err := newURL()
@@ -23,7 +23,7 @@ func GenerateRouter() (chi.Router, error) {
 		r.Get("/", handler.StatusHandler)
 		r.Post("/", handler.CompactHandler(urls))
 		r.Route("/{id}", func(r chi.Router) {
-			r.Get("/", handler.GetHandler(urls))
+			r.Get("/", handler.GetHandler(urls, flagDefaultURL))
 		})
 	})
 

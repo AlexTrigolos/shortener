@@ -43,7 +43,7 @@ func TestRoute(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			newURL = tt.mockURL
-			router, err := GenerateRouter()
+			router, err := GenerateRouter("flagDefaultURL")
 
 			if tt.err != "" {
 				require.ErrorContains(t, err, tt.err)
@@ -55,7 +55,7 @@ func TestRoute(t *testing.T) {
 
 				// Get("/", handler.StatusHandler)
 				// Post("/", handler.CompactHandler(urls)
-				// Get("/{id}", handler.GetHandler(urls))
+				// Get("/{id}", handler.GetHandler(urls, flagDefaultURL))
 				req := resty.New().R()
 				requests := [3][2]string{{http.MethodGet, ""}, {http.MethodPost, ""}, {http.MethodGet, "/short"}}
 				for _, request := range requests {
