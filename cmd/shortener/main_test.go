@@ -9,7 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var mockAddr = ""
+var (
+	mockAddr = ""
+	mockPrs  = 0
+)
 
 func mockSuccessListenAndServe(addr string, handler http.Handler) error {
 	mockAddr = addr
@@ -20,19 +23,26 @@ func mockFailListenAndServe(addr string, handler http.Handler) error {
 	return errors.New("неудачно настроились и запустились хэндлеры")
 }
 
-func mockSuccessGenerateRouter() (chi.Router, error) {
+func mockSuccessGenerateRouter(flagDefaultURL string) (chi.Router, error) {
 	return chi.NewRouter(), nil
 }
 
-func mockFailGenerateRouter() (chi.Router, error) {
+func mockFailGenerateRouter(flagDefaultURL string) (chi.Router, error) {
 	return chi.NewRouter(), errors.New("не побежал")
 }
 
+func mockPrsFlags() {
+	flagRunAddr = ":8080"
+	flagDefaultURL = "http://localhost:8000/unknown_short_url"
+	mockPrs++
+}
+
 func TestMain(t *testing.T) {
+	prsFlags = mockPrsFlags
 	tests := []struct {
 		name               string
 		mockListenAndServe func(addr string, handler http.Handler) error
-		mockGenerateRouter func() (chi.Router, error)
+		mockGenerateRouter func(string) (chi.Router, error)
 		panic              string
 	}{
 		{
@@ -62,7 +72,8 @@ func TestMain(t *testing.T) {
 				assert.PanicsWithError(t, tt.panic, main)
 			} else {
 				assert.NotPanics(t, main)
-				assert.Equal(t, ":8080", mockAddr)
+				assert.Equal(t, flagRunAddr, mockAddr)
+				assert.Equal(t, 1, mockPrs)
 			}
 		})
 	}
