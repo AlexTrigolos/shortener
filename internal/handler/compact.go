@@ -1,17 +1,29 @@
 package handler
 
 import (
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
 
-	"github.com/AlexTrigolos/shortener/internal/model"
-	"github.com/AlexTrigolos/shortener/internal/service"
+	"github.com/AlexTrigolos/shortener/internal/interfaces"
 )
 
-var generateUniqURL = service.GenerateUniqURL
+type GenerateAndSetUniqURL func(interfaces.GetterSetter, string) (string, error)
 
-func CompactHandler(urls *model.URL) http.HandlerFunc {
+type Compact struct {
+	generateAndSetUniqURL GenerateAndSetUniqURL
+	logger                *slog.Logger
+}
+
+func NewCompact(guu GenerateAndSetUniqURL) *Compact {
+	return &Compact{generateAndSetUniqURL: guu, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
+}
+
+func (c Compact) CompactHandler(urls interfaces.GetterSetter, baseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		slog.SetDefault(c.logger)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "не удалось прочитать тело запроса", http.StatusBadRequest)
@@ -25,15 +37,15 @@ func CompactHandler(urls *model.URL) http.HandlerFunc {
 			return
 		}
 
-		short := generateUniqURL(urls)
-		err = urls.Set(short, originalURL)
+		short, err := c.generateAndSetUniqURL(urls, originalURL)
 		if err != nil {
-			http.Error(w, "ошибка добавления URL", http.StatusInternalServerError)
+			c.logger.Error(fmt.Sprintf("создание короткой ссылки: %s", err))
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("http://localhost:8080/" + short))
+		w.Write([]byte(baseURL + "/" + short))
 	}
 }

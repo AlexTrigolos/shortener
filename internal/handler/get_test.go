@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,55 +12,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	mockW          http.ResponseWriter
-	mockR          *http.Request
-	mockURL        string
-	mockCode       int
-	flagDefaultURL = "http://flagDefaultURL.ru"
-)
-
-func mockHTTPRedirect(w http.ResponseWriter, r *http.Request, url string, code int) {
-	mockW = w
-	mockR = r
-	mockURL = url
-	mockCode = code
-
-	w.Header().Set("Location", url)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(code)
-	body := "<a href=\"" + url + "\">Temporary Redirect</a>.\n"
-	fmt.Fprintln(w, body)
-}
-
 func TestGetHandler(t *testing.T) {
 	urls, err := model.NewURL()
 	require.NoError(t, err)
 
 	handler := chi.NewRouter()
-	handler.Get("/{id}", GetHandler(urls, flagDefaultURL))
+	handler.Get("/{id}", GetHandler(urls))
 	srv := httptest.NewServer(handler)
 
 	urls.Set("short.url", srv.URL)
 
 	defer srv.Close()
 
-	httpRedirect = mockHTTPRedirect
+	type Want struct {
+		location    string
+		statusCode  int
+		contentType string
+		response    string
+	}
 
 	tests := []struct {
-		name          string
-		request       string
-		wantLocation string
+		name    string
+		request string
+		want    Want
 	}{
 		{
-			name:          "нашлось значение по ключу",
-			request:       "/short.url",
-			wantLocation: srv.URL,
+			name:    "нашлось значение по ключу",
+			request: "/short.url",
+			want: Want{
+				location:    srv.URL,
+				statusCode:  307,
+				contentType: "text/html; charset=utf-8",
+				response:    "",
+			},
 		},
 		{
-			name:          "нет записей с таким сокращением url",
-			request:       "/unknown.url",
-			wantLocation: flagDefaultURL,
+			name:    "нет записей с таким сокращением url",
+			request: "/unknown.url",
+			want: Want{
+				location:    "",
+				statusCode:  400,
+				contentType: "text/plain; charset=utf-8",
+				response:    "Не нашли запись для: unknown.url\n",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -74,13 +67,22 @@ func TestGetHandler(t *testing.T) {
 
 			resp, err := req.Send()
 
-			require.ErrorContains(t, err, "Get \""+tt.wantLocation+"\": auto redirect is disabled")
+			if tt.want.location == "" {
+				require.NoError(t, err)
 
-			assert.Equal(t, 307, resp.StatusCode())
-			assert.Equal(t, "text/html; charset=utf-8", resp.Header().Get("Content-Type"))
-			assert.Equal(t, "", string(resp.Body()))
+				assert.Equal(t, tt.want.statusCode, resp.StatusCode())
+				assert.Equal(t, tt.want.contentType, resp.Header().Get("Content-Type"))
 
-			assert.Equal(t, tt.wantLocation, resp.Header().Get("Location"))
+				assert.Equal(t, tt.want.response, string(resp.Body()))
+			} else {
+				require.ErrorContains(t, err, "Get \""+tt.want.location+"\": auto redirect is disabled")
+
+				assert.Equal(t, tt.want.statusCode, resp.StatusCode())
+				assert.Equal(t, tt.want.contentType, resp.Header().Get("Content-Type"))
+				assert.Equal(t, tt.want.response, string(resp.Body()))
+
+				assert.Equal(t, tt.want.location, resp.Header().Get("Location"))
+			}
 		})
 	}
 }

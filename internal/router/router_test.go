@@ -1,49 +1,45 @@
 package router
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/AlexTrigolos/shortener/internal/interfaces"
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func mockSuccessNewURL() (*model.URL, error) {
-	urls, _ := model.NewURL()
-	urls.Set("short", "http://google.com") // для удачной проверки Get урла
-	return urls, nil
+func mockNewURL() func() (interfaces.GetterSetter, error) {
+	return model.NewURL
 }
 
-func mockFailNewURL() (*model.URL, error) {
-	urls, _ := model.NewURL()
-	return urls, errors.New("не создали urls")
+func TestNewGenerateRouter(t *testing.T) {
+	t.Run("создать новый GenerateRouter", func(t *testing.T) {
+		newGenerateRouter := NewGenerateRouter(mockNewURL())
+
+		require.IsType(t, &GenerateRouter{newURL: model.NewURL}, newGenerateRouter)
+	})
 }
 
-func TestRoute(t *testing.T) {
+func TestGenerateRoute(t *testing.T) {
 	tests := []struct {
 		name    string
-		mockURL func() (*model.URL, error)
+		mockURL func() (interfaces.GetterSetter, error)
 		err     string
 	}{
 		{
 			name:    "удачный сгенерировали роуты",
-			mockURL: mockSuccessNewURL,
+			mockURL: mockNewURL(),
 			err:     "",
-		},
-		{
-			name:    "не смогли создать urls",
-			mockURL: mockFailNewURL,
-			err:     "не создали urls",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			newURL = tt.mockURL
-			router, err := GenerateRouter("flagDefaultURL")
+			gr := NewGenerateRouter(tt.mockURL)
+			router, err := gr.GenerateRoute("flagDefaultURL")
 
 			if tt.err != "" {
 				require.ErrorContains(t, err, tt.err)

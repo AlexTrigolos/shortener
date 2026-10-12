@@ -1,28 +1,31 @@
 package main
 
 import (
-	"net/http"
+	"fmt"
+	"os"
 
+	"github.com/AlexTrigolos/shortener/internal/config"
+	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/AlexTrigolos/shortener/internal/router"
 )
 
-var (
-	listenAndServe = http.ListenAndServe
-	generateRouter = router.GenerateRouter
-	prsFlags       = parseFlags
-)
-
-func errPanic(err error) {
+func errExitWithLog(server *config.Server, err error) {
 	if err != nil {
-		panic(err)
+		server.Logger.Error(fmt.Sprintf("запуск сервера: %s", err))
+		os.Exit(1)
 	}
 }
 
-func main() {
-	prsFlags()
-	router, err := generateRouter(flagDefaultURL)
-	errPanic(err)
+var prepareServer = config.PrepareServer
 
-	err = listenAndServe(flagRunAddr, router)
-	errPanic(err)
+func main() {
+	server := prepareServer()
+	flags := server.Flags
+
+	r := router.NewGenerateRouter(model.NewURL)
+	rtr, err := r.GenerateRoute(flags.GetBaseURL())
+	errExitWithLog(server, err)
+
+	err = server.ListenAndServe(flags.GetServerAddr(), rtr)
+	errExitWithLog(server, err)
 }
