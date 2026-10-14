@@ -31,6 +31,14 @@ git fetch template && git checkout template/v2 .github
 
 Подробнее про локальный и автоматический запуск читайте в [README автотестов](https://github.com/Yandex-Practicum/go-autotests).
 
+### Команды запуска
+
+В корне проекта должен быть бинарник из https://github.com/Yandex-Practicum/go-autotests/releases/tag/v0.13.7
+
+Сначала необходимо выполнить в `cmd/shortener` команду `go build -o shortener.exe`. Будет сгенерирован исполняемый файл `cmd/shortener/shortener` который далее устанавливается в опцию `-binary-path`.
+
+Далее в командной строке можно выполнить `shortenertest_v2.exe -test.v -test.run=^TestIteration1$ -binary-path=cmd/shortener/shortener -source-path=./ -server-port=8080`. Где `TestIteration1` должен на конце иметь номер итерации, `-binary-path` имеет ссылку сформированную ранее, `-source-path` имеет `./` ведь находится сам в корне и будет запускать тесты на `./...`, `-server-port` должен иметь порт под которым по дефолту запускается сервер.
+
 ## Структура проекта
 
 Приведённая в этом репозитории структура проекта является рекомендуемой, но не обязательной.
