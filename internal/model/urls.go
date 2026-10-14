@@ -5,24 +5,24 @@ import (
 	"sync"
 )
 
+type GetterSetter interface {
+	Set(key, value string) error
+	Get(key string) (string, error)
+}
+
 type URL struct {
-	mu   sync.RWMutex
+	mu   sync.Mutex
 	data map[string]string
 }
 
-func NewURL() (*URL, error) {
+func NewURL() (GetterSetter, error) {
 	return &URL{data: make(map[string]string)}, nil
-}
-
-func (s *URL) IsExists(key string) bool {
-	_, exists := s.data[key]
-	return exists
 }
 
 func (s *URL) Set(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	exists := s.IsExists(key)
+	_, exists := s.data[key]
 	if exists {
 		return errors.New("такой ключ уже занят")
 	}
@@ -31,11 +31,11 @@ func (s *URL) Set(key, value string) error {
 }
 
 func (s *URL) Get(key string) (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	exists := s.IsExists(key)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, exists := s.data[key]
 	if !exists {
 		return "", errors.New("такой ключ не найден")
 	}
-	return s.data[key], nil
+	return value, nil
 }
