@@ -3,11 +3,14 @@ package handler
 import (
 	"net/http"
 
-	"github.com/AlexTrigolos/shortener/internal/interfaces"
 	"github.com/go-chi/chi/v5"
 )
 
-func GetHandler(urls interfaces.GetterSetter) http.HandlerFunc {
+type Getter interface {
+	Get(key string) (string, error)
+}
+
+func GetHandler(urls Getter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 

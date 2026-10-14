@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/AlexTrigolos/shortener/internal/interfaces"
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/AlexTrigolos/shortener/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -23,7 +22,7 @@ const (
 	baseURL  = "http://localhost:8080"
 )
 
-func mockGenerateUniqURL(interfaces.GetterSetter, string) (string, error) {
+func mockGenerateUniqURL(service.Setter, string) (string, error) {
 	return shortURL, nil
 }
 

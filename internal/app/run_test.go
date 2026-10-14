@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"log/slog"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlexTrigolos/shortener/internal/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var success int = 0
@@ -27,6 +28,18 @@ func mockPrepareServer(mockLAS func(addr string, handler http.Handler) error) fu
 	}
 }
 
+func mockApp(mockLAS func(addr string, handler http.Handler) error) *App {
+	return &App{prepareServer: mockPrepareServer(mockLAS)}
+}
+
+func TestNewApp(t *testing.T) {
+	t.Run("создать новый App", func(t *testing.T) {
+		newApp := NewApp()
+
+		require.IsType(t, &App{prepareServer: config.PrepareServer}, newApp)
+	})
+}
+
 func TestMain(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -42,13 +55,12 @@ func TestMain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			success = 0
-			oldPrepareServer := prepareServer
-			prepareServer = mockPrepareServer(tt.mockListenAndServe)
-			defer func() { prepareServer = oldPrepareServer }()
-			assert.NotPanics(t, main)
-			// неудачный запуск не пропускается вторым интеграционным тестом, там ожидается, что ошибок не будет
+			app := mockApp(tt.mockListenAndServe)
+			assert.NotPanics(t, app.RunApp)
 			if tt.ok {
 				assert.Equal(t, 1, success)
+			} else {
+				assert.Equal(t, 0, success)
 			}
 		})
 	}

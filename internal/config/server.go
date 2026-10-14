@@ -18,6 +18,5 @@ func PrepareServer() *Server {
 		Flags:          ParseFlags(),
 		Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
 	}
-	slog.SetDefault(server.Logger)
 	return server
 }

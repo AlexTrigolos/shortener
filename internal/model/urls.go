@@ -3,16 +3,19 @@ package model
 import (
 	"errors"
 	"sync"
-
-	"github.com/AlexTrigolos/shortener/internal/interfaces"
 )
+
+type GetterSetter interface {
+	Set(key, value string) error
+	Get(key string) (string, error)
+}
 
 type URL struct {
 	mu   sync.Mutex
 	data map[string]string
 }
 
-func NewURL() (interfaces.GetterSetter, error) {
+func NewURL() (GetterSetter, error) {
 	return &URL{data: make(map[string]string)}, nil
 }
 

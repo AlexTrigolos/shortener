@@ -12,11 +12,11 @@ import (
 
 const notUniqURL = "ABab1221"
 
-var executedCount = 0
-
-func mockRandStr(n int, letters ...string) string {
-	executedCount++
-	return notUniqURL
+func mockRandStr(executedCount *int, f func(n int, letters ...string) string) func(n int, letters ...string) string {
+	return func(n int, letters ...string) string {
+		*executedCount++
+		return f(n, letters...)
+	}
 }
 
 func TestNewGenerateURL(t *testing.T) {
@@ -41,17 +41,18 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 		},
 		{
 			name:     "было создано повторение существующего урла",
-			mockRand: mockRandStr,
+			mockRand: func(n int, letters ...string) string { return notUniqURL },
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var executedCount = 0
 			urls, err := model.NewURL()
 			require.NoError(t, err)
 			urls.Set(notUniqURL, "value")
 
-			newGenerateURL := NewGenerateURL(tt.mockRand)
+			newGenerateURL := NewGenerateURL(mockRandStr(&executedCount, tt.mockRand))
 			uniqURL, err := newGenerateURL.GenerateAndSetUniqURL(urls, "originalStr")
 
 			if tt.wantErr {
@@ -61,6 +62,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.NotEqual(t, notUniqURL, uniqURL)
+				assert.Equal(t, 1, executedCount)
 				assert.Len(t, []rune(uniqURL), 8)
 			}
 		})
