@@ -13,10 +13,12 @@ import (
 
 func TestNewGenerateRouter(t *testing.T) {
 	t.Run("создать новый GenerateRouter", func(t *testing.T) {
-		urls1, _ := model.NewURL()
+		urls1, err := model.NewURL()
+		require.NoError(t, err)
 		newGenerateRouter := NewGenerateRouter(urls1)
 
-		urls2, _ := model.NewURL()
+		urls2, err := model.NewURL()
+		require.NoError(t, err)
 		require.IsType(t, &GenerateRouter{newURL: urls2}, newGenerateRouter)
 	})
 }
@@ -31,7 +33,8 @@ func TestGenerateRoute(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			urls, _ := model.NewURL()
+			urls, err := model.NewURL()
+			require.NoError(t, err)
 			gr := NewGenerateRouter(urls)
 			router, err := gr.GenerateRoute("flagDefaultURL")
 

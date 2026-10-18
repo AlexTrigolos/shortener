@@ -5,26 +5,18 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-
-	"github.com/AlexTrigolos/shortener/internal/service"
 )
 
-type Setter interface {
-	Set(key, value string) error
-}
-
-type GenerateAndSetUniqURL func(service.Setter, string) (string, error)
-
 type Compact struct {
-	generateAndSetUniqURL GenerateAndSetUniqURL
+	generateAndSetUniqURL func(interface{}, string) (string, error)
 	logger                *slog.Logger
 }
 
-func NewCompact(guu GenerateAndSetUniqURL) *Compact {
+func NewCompact(guu func(interface{}, string) (string, error)) *Compact {
 	return &Compact{generateAndSetUniqURL: guu, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
 }
 
-func (c Compact) CompactHandler(urls Setter, baseURL string) http.HandlerFunc {
+func (c Compact) CompactHandler(urls interface{}, baseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {

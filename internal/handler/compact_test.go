@@ -22,7 +22,7 @@ const (
 	baseURL  = "http://localhost:8080"
 )
 
-func mockGenerateUniqURL(service.Setter, string) (string, error) {
+func mockGenerateUniqURL(interface{}, string) (string, error) {
 	return shortURL, nil
 }
 

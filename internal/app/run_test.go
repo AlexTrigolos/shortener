@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var success int = 0
-
-func mockSuccessListenAndServe(addr string, handler http.Handler) error {
-	success++
-	return nil
+func mockSuccessListenAndServe(success *int) func(addr string, handler http.Handler) error {
+	return func(addr string, handler http.Handler) error {
+		*success++
+		return nil
+	}
 }
 
 func mockPrepareServer(mockLAS func(addr string, handler http.Handler) error) func() *config.Server {
@@ -43,7 +43,7 @@ func TestNewApp(t *testing.T) {
 func TestMain(t *testing.T) {
 	tests := []struct {
 		name               string
-		mockListenAndServe func(addr string, handler http.Handler) error
+		mockListenAndServe func(success *int) func(addr string, handler http.Handler) error
 		ok                 bool
 	}{
 		{
@@ -54,8 +54,8 @@ func TestMain(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			success = 0
-			app := mockApp(tt.mockListenAndServe)
+			success := 0
+			app := mockApp(tt.mockListenAndServe(&success))
 			assert.NotPanics(t, app.RunApp)
 			if tt.ok {
 				assert.Equal(t, 1, success)

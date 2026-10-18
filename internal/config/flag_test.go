@@ -31,7 +31,7 @@ func Test_parseFlags(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			savedOSArgs := os.Args
 			defer func() { os.Args = savedOSArgs }()
-			os.Args = append(os.Args, tt.args...)
+			os.Args = append([]string{os.Args[0]}, tt.args...)
 
 			config := ParseFlags()
 

@@ -2,20 +2,22 @@ package router
 
 import (
 	"github.com/AlexTrigolos/shortener/internal/handler"
-	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/AlexTrigolos/shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/thanhpk/randstr"
 )
 
-type NewURL model.GetterSetter
-
-type GenerateRouter struct {
-	newURL NewURL
+type GetterSetter interface {
+	Set(key, value string) error
+	Get(key string) (string, error)
 }
 
-func NewGenerateRouter(nu model.GetterSetter) *GenerateRouter {
+type GenerateRouter struct {
+	newURL GetterSetter
+}
+
+func NewGenerateRouter(nu GetterSetter) *GenerateRouter {
 	return &GenerateRouter{newURL: nu}
 }
 
