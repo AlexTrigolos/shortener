@@ -13,7 +13,8 @@ import (
 
 func TestPrepareServer(t *testing.T) {
 	t.Run("создали новый Server", func(t *testing.T) {
-		preparedServer := PrepareServer()
+		preparedServer, err := PrepareServer()
+		require.NoError(t, err)
 
 		expectedServer := &Server{
 			ListenAndServe: http.ListenAndServe,

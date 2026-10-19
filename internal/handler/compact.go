@@ -7,16 +7,20 @@ import (
 	"os"
 )
 
+type URLGenerator interface {
+	GenerateAndSetUniqURL(originalURL string) (string, error)
+}
+
 type Compact struct {
-	generateAndSetUniqURL func(interface{}, string) (string, error)
-	logger                *slog.Logger
+	generator URLGenerator
+	logger    *slog.Logger
 }
 
-func NewCompact(guu func(interface{}, string) (string, error)) *Compact {
-	return &Compact{generateAndSetUniqURL: guu, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
+func NewCompact(guu URLGenerator) *Compact {
+	return &Compact{generator: guu, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
 }
 
-func (c Compact) CompactHandler(urls interface{}, baseURL string) http.HandlerFunc {
+func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -31,7 +35,7 @@ func (c Compact) CompactHandler(urls interface{}, baseURL string) http.HandlerFu
 			return
 		}
 
-		short, err := c.generateAndSetUniqURL(urls, originalURL)
+		short, err := c.generator.GenerateAndSetUniqURL(originalURL)
 		if err != nil {
 			c.logger.Error("создание короткой ссылки", "error", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

@@ -22,18 +22,22 @@ const (
 	baseURL  = "http://localhost:8080"
 )
 
-func mockGenerateUniqURL(interface{}, string) (string, error) {
+type MockGenerator struct {}
+
+func (mg MockGenerator) GenerateAndSetUniqURL(string) (string, error) {
 	return shortURL, nil
 }
 
 func TestNewCompact(t *testing.T) {
-	generateAndSetUniqURL := service.NewGenerateURL(randstr.String).GenerateAndSetUniqURL
+	urls, err := model.NewURL()
+	require.NoError(t, err)
+	generator := service.NewGenerateURL(randstr.String, urls)
 	t.Run("создать новый Compact", func(t *testing.T) {
-		newCompact := NewCompact(generateAndSetUniqURL)
+		newCompact := NewCompact(generator)
 
-		expectedCompact := &Compact{generateAndSetUniqURL: generateAndSetUniqURL, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
+		expectedCompact := &Compact{generator: generator, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
 		require.IsType(t, expectedCompact, newCompact)
-		assert.Equal(t, reflect.ValueOf(expectedCompact.generateAndSetUniqURL), reflect.ValueOf(newCompact.generateAndSetUniqURL))
+		assert.Equal(t, reflect.ValueOf(expectedCompact.generator), reflect.ValueOf(newCompact.generator))
 		assert.Equal(t, expectedCompact.logger, newCompact.logger)
 	})
 }
@@ -43,8 +47,8 @@ func TestCompactHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	handler := chi.NewRouter()
-	compact := NewCompact(mockGenerateUniqURL)
-	handler.Post("/", compact.CompactHandler(urls, baseURL))
+	compact := NewCompact(MockGenerator{})
+	handler.Post("/", compact.CompactHandler(baseURL))
 	srv := httptest.NewServer(handler)
 
 	urls.Set("short.url", srv.URL)

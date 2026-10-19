@@ -26,12 +26,12 @@ func (gr *GenerateRouter) GenerateRoute(baseURL string) (chi.Router, error) {
 
 	r.Use(middleware.ClientIPFromRemoteAddr, middleware.Logger, middleware.Recoverer)
 
-	generateURL := service.NewGenerateURL(randstr.String)
-	compact := handler.NewCompact(generateURL.GenerateAndSetUniqURL)
+	generateURL := service.NewGenerateURL(randstr.String, gr.newURL)
+	compact := handler.NewCompact(generateURL)
 
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", handler.StatusHandler)
-		r.Post("/", compact.CompactHandler(gr.newURL, baseURL))
+		r.Post("/", compact.CompactHandler(baseURL))
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handler.GetHandler(gr.newURL))
 		})

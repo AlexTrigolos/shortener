@@ -12,11 +12,15 @@ type Server struct {
 	Logger         *slog.Logger
 }
 
-func PrepareServer() *Server {
+func PrepareServer() (*Server, error) {
+	flags, err := ParseFlags()
+	if err != nil {
+		return &Server{Logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}, err
+	}
 	server := &Server{
 		ListenAndServe: http.ListenAndServe,
-		Flags:          ParseFlags(),
+		Flags:          flags,
 		Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
 	}
-	return server
+	return server, nil
 }

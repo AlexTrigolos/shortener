@@ -18,18 +18,19 @@ func mockSuccessListenAndServe(success *int) func(addr string, handler http.Hand
 	}
 }
 
-func mockPrepareServer(mockLAS func(addr string, handler http.Handler) error) func() *config.Server {
-	return func() *config.Server {
+func mockPrepareServer(mockLAS func(addr string, handler http.Handler) error) func() (*config.Server, error) {
+	return func() (*config.Server, error) {
 		return &config.Server{
 			ListenAndServe: mockLAS,
 			Flags:          config.Config{},
 			Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
-		}
+		}, nil
 	}
 }
 
 func mockApp(mockLAS func(addr string, handler http.Handler) error) *App {
-	return &App{prepareServer: mockPrepareServer(mockLAS)}
+	serverFunc := mockPrepareServer(mockLAS)
+	return &App{prepareServer: serverFunc}
 }
 
 func TestNewApp(t *testing.T) {
@@ -40,7 +41,7 @@ func TestNewApp(t *testing.T) {
 	})
 }
 
-func TestMain(t *testing.T) {
+func TestRunApp(t *testing.T) {
 	tests := []struct {
 		name               string
 		mockListenAndServe func(success *int) func(addr string, handler http.Handler) error

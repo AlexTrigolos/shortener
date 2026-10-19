@@ -16,7 +16,7 @@ func errExitWithLog(server *config.Server, err error) {
 }
 
 type App struct {
-	prepareServer func() *config.Server
+	prepareServer func() (*config.Server, error)
 }
 
 func NewApp() *App {
@@ -24,7 +24,8 @@ func NewApp() *App {
 }
 
 func (a App) RunApp() {
-	server := a.prepareServer()
+	server, err := a.prepareServer()
+	errExitWithLog(server, err)
 	flags := server.Flags
 
 	newURL, err := model.NewURL()

@@ -19,16 +19,15 @@ func mockRandStr(executedCount *int, f func(n int, letters ...string) string) fu
 	}
 }
 
-func mockNewURL() (*struct{}, error) {
-	return &struct{}{}, nil
-}
-
 func TestNewGenerateURL(t *testing.T) {
 	t.Run("создать новый GenerateURL", func(t *testing.T) {
-		newGenerateRouter := NewGenerateURL(randstr.String)
+		urls, err := model.NewURL()
+		require.NoError(t, err)
+		newGenerateRouter := NewGenerateURL(randstr.String, urls)
 
 		require.IsType(t, &GenerateURL{randStr: randstr.String}, newGenerateRouter)
 		assert.Equal(t, reflect.ValueOf(GenerateURL{randStr: randstr.String}.randStr), reflect.ValueOf(newGenerateRouter.randStr))
+		assert.Equal(t, reflect.ValueOf(GenerateURL{storage: urls}.storage), reflect.ValueOf(newGenerateRouter.storage))
 	})
 }
 
@@ -48,44 +47,26 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			mockRand: func(n int, letters ...string) string { return notUniqURL },
 			wantErr:  "исчерпано количество попыток создать короткую ссылку",
 		},
-		{
-			name:     "передан интерфейс не реализующий Setter",
-			mockRand: randstr.String,
-			wantErr:  "не был реализован интерфейс для генерации короткой ссылки",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var executedCount = 0
-			// отдельно обрабатываю ошибку интерфейса, потому что не удается нормально замокать создание псевдо URL без Setter'а
-			if tt.wantErr == "не был реализован интерфейс для генерации короткой ссылки" {
-				fakeURLs, err := mockNewURL()
-				require.NoError(t, err)
+			urls, err := model.NewURL()
+			require.NoError(t, err)
+			urls.Set(notUniqURL, "value")
 
-				newGenerateURL := NewGenerateURL(mockRandStr(&executedCount, tt.mockRand))
-				uniqURL, err := newGenerateURL.GenerateAndSetUniqURL(fakeURLs, "originalStr")
+			newGenerateURL := NewGenerateURL(mockRandStr(&executedCount, tt.mockRand), urls)
+			uniqURL, err := newGenerateURL.GenerateAndSetUniqURL("originalStr")
 
+			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 				assert.Equal(t, "", uniqURL)
-				assert.Equal(t, 0, executedCount)
+				assert.Equal(t, 10, executedCount)
 			} else {
-				urls, err := model.NewURL()
 				require.NoError(t, err)
-				urls.Set(notUniqURL, "value")
-
-				newGenerateURL := NewGenerateURL(mockRandStr(&executedCount, tt.mockRand))
-				uniqURL, err := newGenerateURL.GenerateAndSetUniqURL(urls, "originalStr")
-
-				if tt.wantErr != "" {
-					require.ErrorContains(t, err, tt.wantErr)
-					assert.Equal(t, "", uniqURL)
-					assert.Equal(t, 10, executedCount)
-				} else {
-					require.NoError(t, err)
-					assert.NotEqual(t, notUniqURL, uniqURL)
-					assert.Equal(t, 1, executedCount)
-					assert.Len(t, []rune(uniqURL), 8)
-				}
+				assert.NotEqual(t, notUniqURL, uniqURL)
+				assert.Equal(t, 1, executedCount)
+				assert.Len(t, []rune(uniqURL), 8)
 			}
 		})
 	}
