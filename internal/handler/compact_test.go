@@ -1,21 +1,45 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"testing"
 
 	"github.com/AlexTrigolos/shortener/internal/model"
+	"github.com/AlexTrigolos/shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thanhpk/randstr"
 )
 
-const shortURL = "EwHXdJfB"
+const (
+	shortURL = "EwHXdJfB"
+	baseURL  = "http://localhost:8080"
+)
 
-func mockGenerateUniqURL(urls *model.URL) string {
-	return shortURL
+type MockGenerator struct {}
+
+func (mg MockGenerator) GenerateAndSetUniqURL(string) (string, error) {
+	return shortURL, nil
+}
+
+func TestNewCompact(t *testing.T) {
+	urls, err := model.NewURL()
+	require.NoError(t, err)
+	generator := service.NewGenerateURL(randstr.String, urls)
+	t.Run("создать новый Compact", func(t *testing.T) {
+		newCompact := NewCompact(generator)
+
+		expectedCompact := &Compact{generator: generator, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
+		require.IsType(t, expectedCompact, newCompact)
+		assert.Equal(t, reflect.ValueOf(expectedCompact.generator), reflect.ValueOf(newCompact.generator))
+		assert.Equal(t, expectedCompact.logger, newCompact.logger)
+	})
 }
 
 func TestCompactHandler(t *testing.T) {
@@ -23,11 +47,11 @@ func TestCompactHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	handler := chi.NewRouter()
-	handler.Post("/", CompactHandler(urls))
+	compact := NewCompact(MockGenerator{})
+	handler.Post("/", compact.CompactHandler(baseURL))
 	srv := httptest.NewServer(handler)
 
 	urls.Set("short.url", srv.URL)
-	generateUniqURL = mockGenerateUniqURL
 
 	defer srv.Close()
 
@@ -47,7 +71,7 @@ func TestCompactHandler(t *testing.T) {
 			want: want{
 				statusCode:  201,
 				contentType: "text/plain",
-				response:    "http://localhost:8080/" + shortURL,
+				response:    baseURL + "/" + shortURL,
 			},
 		},
 		{

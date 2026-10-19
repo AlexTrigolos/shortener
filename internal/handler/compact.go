@@ -2,15 +2,25 @@ package handler
 
 import (
 	"io"
+	"log/slog"
 	"net/http"
-
-	"github.com/AlexTrigolos/shortener/internal/model"
-	"github.com/AlexTrigolos/shortener/internal/service"
+	"os"
 )
 
-var generateUniqURL = service.GenerateUniqURL
+type URLGenerator interface {
+	GenerateAndSetUniqURL(originalURL string) (string, error)
+}
 
-func CompactHandler(urls *model.URL) http.HandlerFunc {
+type Compact struct {
+	generator URLGenerator
+	logger    *slog.Logger
+}
+
+func NewCompact(guu URLGenerator) *Compact {
+	return &Compact{generator: guu, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
+}
+
+func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -25,15 +35,15 @@ func CompactHandler(urls *model.URL) http.HandlerFunc {
 			return
 		}
 
-		short := generateUniqURL(urls)
-		err = urls.Set(short, originalURL)
+		short, err := c.generator.GenerateAndSetUniqURL(originalURL)
 		if err != nil {
-			http.Error(w, "ошибка добавления URL", http.StatusInternalServerError)
+			c.logger.Error("создание короткой ссылки", "error", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("http://localhost:8080/" + short))
+		w.Write([]byte(baseURL + "/" + short))
 	}
 }
