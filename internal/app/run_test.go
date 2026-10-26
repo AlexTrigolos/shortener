@@ -11,25 +11,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func mockSuccessListenAndServe(success *int) func(addr string, handler http.Handler) error {
+func mockWithLogger(successLogger *int) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		*successLogger++
+		return h
+	}
+}
+
+func mockSuccessListenAndServe(successLAS *int) func(addr string, handler http.Handler) error {
 	return func(addr string, handler http.Handler) error {
-		*success++
+		*successLAS++
 		return nil
 	}
 }
 
-func mockPrepareServer(mockLAS func(addr string, handler http.Handler) error) func() (*config.Server, error) {
+func mockPrepareServer(successLogger *int, mockLAS func(addr string, handler http.Handler) error) func() (*config.Server, error) {
 	return func() (*config.Server, error) {
 		return &config.Server{
 			ListenAndServe: mockLAS,
 			Flags:          config.Config{},
 			Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
+			LoggingURI:     mockWithLogger(successLogger),
 		}, nil
 	}
 }
 
-func mockApp(mockLAS func(addr string, handler http.Handler) error) *App {
-	serverFunc := mockPrepareServer(mockLAS)
+func mockApp(successLogger *int, mockLAS func(addr string, handler http.Handler) error) *App {
+	serverFunc := mockPrepareServer(successLogger, mockLAS)
 	return &App{prepareServer: serverFunc}
 }
 
@@ -55,13 +63,16 @@ func TestRunApp(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			success := 0
-			app := mockApp(tt.mockListenAndServe(&success))
+			successLAS := 0
+			successLogger := 0
+			app := mockApp(&successLogger, tt.mockListenAndServe(&successLAS))
 			assert.NotPanics(t, app.RunApp)
 			if tt.ok {
-				assert.Equal(t, 1, success)
+				assert.Equal(t, 1, successLAS)
+				assert.Equal(t, 1, successLogger)
 			} else {
-				assert.Equal(t, 0, success)
+				assert.Equal(t, 0, successLAS)
+				assert.Equal(t, 0, successLogger)
 			}
 		})
 	}

@@ -20,6 +20,7 @@ func TestPrepareServer(t *testing.T) {
 			ListenAndServe: http.ListenAndServe,
 			Flags:          Config{Addr: ":8080", BaseURL: "http://localhost:8080"},
 			Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
+			LoggingURI:     WithLogging,
 		}
 
 		require.IsType(t, expectedServer, preparedServer)
@@ -27,5 +28,6 @@ func TestPrepareServer(t *testing.T) {
 		assert.Equal(t, reflect.ValueOf(expectedServer.ListenAndServe), reflect.ValueOf(preparedServer.ListenAndServe))
 		assert.Equal(t, expectedServer.Flags, preparedServer.Flags)
 		assert.Equal(t, expectedServer.Logger, preparedServer.Logger)
+		assert.Equal(t, reflect.ValueOf(expectedServer.LoggingURI), reflect.ValueOf(preparedServer.LoggingURI))
 	})
 }
