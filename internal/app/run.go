@@ -35,6 +35,6 @@ func (a App) RunApp() {
 	rtr, err := r.GenerateRoute(flags.GetBaseURL())
 	errExitWithLog(server, err)
 
-	err = server.ListenAndServe(flags.GetServerAddr(), rtr)
+	err = server.ListenAndServe(flags.GetServerAddr(), server.LoggingURI(rtr))
 	errExitWithLog(server, err)
 }

@@ -24,7 +24,8 @@ func NewGenerateRouter(nu GetterSetter) *GenerateRouter {
 func (gr *GenerateRouter) GenerateRoute(baseURL string) (chi.Router, error) {
 	r := chi.NewRouter()
 
-	r.Use(middleware.ClientIPFromRemoteAddr, middleware.Logger, middleware.Recoverer)
+	// middleware.Logger убрал втоматическое логирование
+	r.Use(middleware.ClientIPFromRemoteAddr, middleware.Recoverer)
 
 	generateURL := service.NewGenerateURL(randstr.String, gr.newURL)
 	compact := handler.NewCompact(generateURL)

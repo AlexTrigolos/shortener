@@ -10,6 +10,7 @@ type Server struct {
 	ListenAndServe func(addr string, handler http.Handler) error
 	Flags          Config
 	Logger         *slog.Logger
+	LoggingURI		 func(h http.Handler) http.Handler
 }
 
 func PrepareServer() (*Server, error) {
@@ -21,6 +22,7 @@ func PrepareServer() (*Server, error) {
 		ListenAndServe: http.ListenAndServe,
 		Flags:          flags,
 		Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
+		LoggingURI:			WithLogging,
 	}
 	return server, nil
 }
