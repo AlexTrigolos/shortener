@@ -16,8 +16,8 @@ type Compact struct {
 	logger    *slog.Logger
 }
 
-func NewCompact(guu URLGenerator) *Compact {
-	return &Compact{generator: guu, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
+func NewCompact(ug URLGenerator) *Compact {
+	return &Compact{generator: ug, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
 }
 
 func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
