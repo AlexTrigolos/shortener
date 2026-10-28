@@ -1,4 +1,4 @@
-package config
+package middleware
 
 import (
 	"net/http"
@@ -53,10 +53,10 @@ func Test_loggingResponseWriter_WriteHeader(t *testing.T) {
 
 func fakeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`Сервер запущен :)`))
+	w.Write([]byte(`Server started :)`))
 }
 
-func TestWithLogging(t *testing.T) {
+func TestLoggerMiddleware(t *testing.T) {
 	tests := []struct {
 		name        string
 		handlerFunc func(w http.ResponseWriter, r *http.Request)
@@ -69,7 +69,7 @@ func TestWithLogging(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := http.HandlerFunc(tt.handlerFunc)
-			srv := httptest.NewServer(WithLogging(handler))
+			srv := httptest.NewServer(LoggerMiddleware(handler))
 			defer srv.Close()
 
 			req := resty.New().R()
