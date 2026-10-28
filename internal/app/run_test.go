@@ -11,9 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func mockWithLogger(successLogger *int) func(h http.Handler) http.Handler {
+func mockLoggerMiddleware(successLogger *int) func(h http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		*successLogger++
+		return h
+	}
+}
+
+func mockGzipMiddleware(successGzip *int) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		*successGzip++
 		return h
 	}
 }
@@ -25,19 +32,20 @@ func mockSuccessListenAndServe(successLAS *int) func(addr string, handler http.H
 	}
 }
 
-func mockPrepareServer(successLogger *int, mockLAS func(addr string, handler http.Handler) error) func() (*config.Server, error) {
+func mockPrepareServer(successLogger *int, successGzip *int, mockLAS func(addr string, handler http.Handler) error) func() (*config.Server, error) {
 	return func() (*config.Server, error) {
 		return &config.Server{
-			ListenAndServe: mockLAS,
-			Flags:          config.Config{},
-			Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
-			LoggingURI:     mockWithLogger(successLogger),
+			ListenAndServe:   mockLAS,
+			Flags:            config.Config{},
+			Logger:           slog.New(slog.NewTextHandler(os.Stdout, nil)),
+			LoggerMiddleware: mockLoggerMiddleware(successLogger),
+			GzipMiddleware:   mockGzipMiddleware(successGzip),
 		}, nil
 	}
 }
 
-func mockApp(successLogger *int, mockLAS func(addr string, handler http.Handler) error) *App {
-	serverFunc := mockPrepareServer(successLogger, mockLAS)
+func mockApp(successLogger *int, successGzip *int, mockLAS func(addr string, handler http.Handler) error) *App {
+	serverFunc := mockPrepareServer(successLogger, successGzip, mockLAS)
 	return &App{prepareServer: serverFunc}
 }
 
@@ -63,9 +71,8 @@ func TestRunApp(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			successLAS := 0
-			successLogger := 0
-			app := mockApp(&successLogger, tt.mockListenAndServe(&successLAS))
+			successLAS, successLogger, successGzip := 0, 0, 0
+			app := mockApp(&successLogger, &successGzip, tt.mockListenAndServe(&successLAS))
 			assert.NotPanics(t, app.RunApp)
 			if tt.ok {
 				assert.Equal(t, 1, successLAS)

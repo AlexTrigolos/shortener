@@ -4,13 +4,16 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+
+	"github.com/AlexTrigolos/shortener/internal/config/middleware"
 )
 
 type Server struct {
-	ListenAndServe func(addr string, handler http.Handler) error
-	Flags          Config
-	Logger         *slog.Logger
-	LoggingURI		 func(h http.Handler) http.Handler
+	ListenAndServe   func(addr string, handler http.Handler) error
+	Flags            Config
+	Logger           *slog.Logger
+	LoggerMiddleware func(h http.Handler) http.Handler
+	GzipMiddleware   func(h http.Handler) http.Handler
 }
 
 func PrepareServer() (*Server, error) {
@@ -19,10 +22,11 @@ func PrepareServer() (*Server, error) {
 		return &Server{Logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}, err
 	}
 	server := &Server{
-		ListenAndServe: http.ListenAndServe,
-		Flags:          flags,
-		Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
-		LoggingURI:			WithLogging,
+		ListenAndServe:   http.ListenAndServe,
+		Flags:            flags,
+		Logger:           slog.New(slog.NewTextHandler(os.Stdout, nil)),
+		LoggerMiddleware: middleware.LoggerMiddleware,
+		GzipMiddleware:   middleware.GzipMiddleware,
 	}
 	return server, nil
 }

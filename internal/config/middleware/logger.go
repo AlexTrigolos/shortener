@@ -1,4 +1,4 @@
-package config
+package middleware
 
 import (
 	"fmt"
@@ -26,7 +26,7 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.status = statusCode
 }
 
-func WithLogging(h http.Handler) http.Handler {
+func LoggerMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger, err := zap.NewDevelopment()
 		if err != nil {
@@ -40,8 +40,8 @@ func WithLogging(h http.Handler) http.Handler {
 
 		lw := loggingResponseWriter{
 			ResponseWriter: w,
-			status: 0,
-			size:   0,
+			status:         0,
+			size:           0,
 		}
 
 		h.ServeHTTP(&lw, r)
