@@ -10,60 +10,67 @@ import (
 
 func Test_parseFlags(t *testing.T) {
 	tests := []struct {
-		name        string
-		env         [][2]string
-		args        []string
-		runAddr     string
-		flagBaseURL string
-		wantErr     string
+		name                string
+		env                 [][2]string
+		args                []string
+		runAddr             string
+		flagBaseURL         string
+		flagFileStoragePath string
+		wantErr             string
 	}{
 		{
-			name:        "не указаны флаги и env",
-			env:         [][2]string{},
-			args:        []string{},
-			runAddr:     ":8080",
-			flagBaseURL: "http://localhost:8080",
-			wantErr:     "",
+			name:                "не указаны флаги и env",
+			env:                 [][2]string{},
+			args:                []string{},
+			runAddr:             ":8080",
+			flagBaseURL:         "http://localhost:8080",
+			flagFileStoragePath: "./urls_storage.json",
+			wantErr:             "",
 		},
 		{
-			name:        "флаги указаны но нет env",
-			env:         [][2]string{},
-			args:        []string{"-a=:9091", "-b=https://my.args.domain/specific_url"},
-			runAddr:     ":9091",
-			flagBaseURL: "https://my.args.domain",
-			wantErr:     "",
+			name:                "флаги указаны но нет env",
+			env:                 [][2]string{},
+			args:                []string{"-a=:9091", "-b=https://my.args.domain/specific_url", "-f=./flag_storage.json"},
+			runAddr:             ":9091",
+			flagBaseURL:         "https://my.args.domain",
+			flagFileStoragePath: "./flag_storage.json",
+			wantErr:             "",
 		},
 		{
-			name:        "флаги не указаны но есть env",
-			env:         [][2]string{{"SERVER_ADDRESS", ":9099"}, {"BASE_URL", "https://my.env.domain/specific_url"}},
-			args:        []string{},
-			runAddr:     ":9099",
-			flagBaseURL: "https://my.env.domain",
-			wantErr:     "",
+			name:                "флаги не указаны но есть env",
+			env:                 [][2]string{{"SERVER_ADDRESS", ":9099"}, {"BASE_URL", "https://my.env.domain/specific_url"}, {"FILE_STORAGE_PATH", "./env_storage.json"}},
+			args:                []string{},
+			runAddr:             ":9099",
+			flagBaseURL:         "https://my.env.domain",
+			flagFileStoragePath: "./env_storage.json",
+			wantErr:             "",
 		},
 		{
-			name:        "флаги и env указаны",
-			env:         [][2]string{{"SERVER_ADDRESS", ":9099"}, {"BASE_URL", "https://my.env.domain/specific_url"}},
-			args:        []string{"-a=:9091", "-b=https://my.args.domain/specific_url"},
-			runAddr:     ":9099",
-			flagBaseURL: "https://my.env.domain",
-			wantErr:     "",
+			name:                "флаги и env указаны",
+			env:                 [][2]string{{"SERVER_ADDRESS", ":9099"}, {"BASE_URL", "https://my.env.domain/specific_url"}, {"FILE_STORAGE_PATH", "./env_storage.json"}},
+			args:                []string{"-a=:9091", "-b=https://my.args.domain/specific_url", "-f=./flag_storage.json"},
+			runAddr:             ":9099",
+			flagBaseURL:         "https://my.env.domain",
+			flagFileStoragePath: "./env_storage.json",
+			wantErr:             "",
 		},
 		{
-			name:        "ошибочный флаг",
-			env:         [][2]string{},
-			args:        []string{"-b=\n"},
-			runAddr:     "no_value",
-			flagBaseURL: "no_value",
-			wantErr:     "ошибка парсинга флага",
+			name:                "ошибочный флаг",
+			env:                 [][2]string{},
+			args:                []string{"-b=\n"},
+			runAddr:             "no_value",
+			flagBaseURL:         "no_value",
+			flagFileStoragePath: "no_value",
+			wantErr:             "ошибка парсинга флага",
 		},
 		{
-			name:        "флаг не ссылка",
-			env:         [][2]string{},
-			args:        []string{"-b=123@mail"},
-			runAddr:     "no_value",
-			flagBaseURL: "no_value",
-			wantErr:     "флаг не является ссылкой",
+			name:                "флаг не ссылка",
+			env:                 [][2]string{},
+			args:                []string{"-b=123@mail"},
+			runAddr:             "no_value",
+			flagBaseURL:         "no_value",
+			flagFileStoragePath: "no_value",
+			wantErr:             "флаг не является ссылкой",
 		},
 	}
 	for _, tt := range tests {

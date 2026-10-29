@@ -1,6 +1,8 @@
 package service
 
 import (
+	"encoding/json"
+	"os"
 	"reflect"
 	"testing"
 
@@ -20,8 +22,18 @@ func mockRandStr(executedCount *int, f func(n int, letters ...string) string) fu
 }
 
 func TestNewGenerateURL(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
 	t.Run("создать новый GenerateURL", func(t *testing.T) {
-		urls, err := model.NewURL()
+		urls, err := model.NewURL(filename)
 		require.NoError(t, err)
 		newGenerateRouter := NewGenerateURL(randstr.String, urls)
 
@@ -32,6 +44,16 @@ func TestNewGenerateURL(t *testing.T) {
 }
 
 func TestGenerateAndSetUniqURL(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
 	tests := []struct {
 		name     string
 		mockRand func(n int, letters ...string) string
@@ -51,7 +73,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var executedCount = 0
-			urls, err := model.NewURL()
+			urls, err := model.NewURL(filename)
 			require.NoError(t, err)
 			urls.Set(notUniqURL, "value")
 

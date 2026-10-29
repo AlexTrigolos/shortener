@@ -1,8 +1,10 @@
 package router
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/AlexTrigolos/shortener/internal/model"
@@ -12,20 +14,40 @@ import (
 )
 
 func TestNewGenerateRouter(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
 	t.Run("создать новый GenerateRouter", func(t *testing.T) {
-		urls1, err := model.NewURL()
+		urls1, err := model.NewURL(filename)
 		require.NoError(t, err)
 		newGenerateRouter := NewGenerateRouter(urls1)
 
-		urls2, err := model.NewURL()
+		urls2, err := model.NewURL(filename)
 		require.NoError(t, err)
 		require.IsType(t, &GenerateRouter{newURL: urls2}, newGenerateRouter)
 	})
 }
 
 func TestGenerateRoute(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
 	t.Run("удачный сгенерировали роуты", func(t *testing.T) {
-		urls, err := model.NewURL()
+		urls, err := model.NewURL(filename)
 		require.NoError(t, err)
 		gr := NewGenerateRouter(urls)
 		router, err := gr.GenerateRoute("flagbaseURL")

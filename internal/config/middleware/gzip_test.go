@@ -3,9 +3,11 @@ package middleware
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,8 +23,18 @@ func mockRandStr(n int, letters ...string) string {
 }
 
 func TestGzipMiddleware(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
 	t.Run("sends_gzip", func(t *testing.T) {
-		urls, err := model.NewURL()
+		urls, err := model.NewURL(filename)
 		require.NoError(t, err)
 		handler := GzipMiddleware(http.HandlerFunc(api.NewCompact(service.NewGenerateURL(mockRandStr, urls)).CompactHandler("https://host:port")))
 		srv := httptest.NewServer(handler)
