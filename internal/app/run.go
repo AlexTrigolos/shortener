@@ -28,7 +28,7 @@ func (a App) RunApp() {
 	errExitWithLog(server, err)
 	flags := server.Flags
 
-	newURL, err := model.NewURL()
+	newURL, err := model.NewURL(server.Flags.FileStoragePath)
 	errExitWithLog(server, err)
 	r := router.NewGenerateRouter(newURL)
 

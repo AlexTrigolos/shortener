@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -36,7 +37,17 @@ func (mg MockFailGenerator) GenerateAndSetUniqURL(string) (string, error) {
 }
 
 func TestNewCompact(t *testing.T) {
-	urls, err := model.NewURL()
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
+	urls, err := model.NewURL(filename)
 	require.NoError(t, err)
 	generator := service.NewGenerateURL(randstr.String, urls)
 	t.Run("создать новый Compact", func(t *testing.T) {
@@ -50,7 +61,17 @@ func TestNewCompact(t *testing.T) {
 }
 
 func TestCompactHandler(t *testing.T) {
-	urls, err := model.NewURL()
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
+	urls, err := model.NewURL(filename)
 	require.NoError(t, err)
 
 	handler := chi.NewRouter()

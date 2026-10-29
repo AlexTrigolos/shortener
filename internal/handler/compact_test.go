@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -22,14 +23,24 @@ const (
 	baseURL  = "http://localhost:8080"
 )
 
-type MockGenerator struct {}
+type MockGenerator struct{}
 
 func (mg MockGenerator) GenerateAndSetUniqURL(string) (string, error) {
 	return shortURL, nil
 }
 
 func TestNewCompact(t *testing.T) {
-	urls, err := model.NewURL()
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
+	urls, err := model.NewURL(filename)
 	require.NoError(t, err)
 	generator := service.NewGenerateURL(randstr.String, urls)
 	t.Run("создать новый Compact", func(t *testing.T) {
@@ -43,7 +54,17 @@ func TestNewCompact(t *testing.T) {
 }
 
 func TestCompactHandler(t *testing.T) {
-	urls, err := model.NewURL()
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
+	urls, err := model.NewURL(filename)
 	require.NoError(t, err)
 
 	handler := chi.NewRouter()
