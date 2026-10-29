@@ -1,8 +1,10 @@
 package router
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/AlexTrigolos/shortener/internal/model"
@@ -12,51 +14,63 @@ import (
 )
 
 func TestNewGenerateRouter(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
 	t.Run("создать новый GenerateRouter", func(t *testing.T) {
-		urls1, err := model.NewURL()
+		urls1, err := model.NewURL(filename)
 		require.NoError(t, err)
 		newGenerateRouter := NewGenerateRouter(urls1)
 
-		urls2, err := model.NewURL()
+		urls2, err := model.NewURL(filename)
 		require.NoError(t, err)
 		require.IsType(t, &GenerateRouter{newURL: urls2}, newGenerateRouter)
 	})
 }
 
 func TestGenerateRoute(t *testing.T) {
-	tests := []struct {
-		name string
-	}{
-		{
-			name: "удачный сгенерировали роуты",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			urls, err := model.NewURL()
-			require.NoError(t, err)
-			gr := NewGenerateRouter(urls)
-			router, err := gr.GenerateRoute("flagDefaultURL")
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
 
-			require.NoError(t, err)
+	t.Run("удачный сгенерировали роуты", func(t *testing.T) {
+		urls, err := model.NewURL(filename)
+		require.NoError(t, err)
+		gr := NewGenerateRouter(urls)
+		router, err := gr.GenerateRoute("flagbaseURL")
 
-			srv := httptest.NewServer(router)
-			defer srv.Close()
+		require.NoError(t, err)
 
-			// Get("/", handler.StatusHandler)
-			// Post("/", handler.CompactHandler(urls)
-			// Get("/{id}", handler.GetHandler(urls, flagDefaultURL))
-			req := resty.New().R()
-			requests := [3][2]string{{http.MethodGet, ""}, {http.MethodPost, ""}, {http.MethodGet, "/short"}}
-			for _, request := range requests {
-				req.Method = request[0]
-				req.URL = srv.URL + request[1]
+		srv := httptest.NewServer(router)
+		defer srv.Close()
 
-				resp, err := req.Send()
-				require.NoError(t, err, "не удалось сделать http запрос")
+		// Get("/", handler.StatusHandler)
+		// Post("/", handler.CompactHandler(baseURL)
+		// Get("/{id}", handler.GetHandler(newURL))
+		// Post("/api/shorten", handler.CompactHandler(baseURL)
+		req := resty.New().R()
+		requests := [4][2]string{{http.MethodGet, ""}, {http.MethodPost, ""}, {http.MethodGet, "/short"}, {http.MethodPost, "/api/shorten"}}
+		for _, request := range requests {
+			req.Method = request[0]
+			req.URL = srv.URL + request[1]
 
-				assert.NotEqual(t, http.StatusNotFound, resp.StatusCode(), "http страница не найдена")
-			}
-		})
-	}
+			resp, err := req.Send()
+			require.NoError(t, err, "не удалось сделать http запрос")
+
+			assert.NotEqual(t, http.StatusNotFound, resp.StatusCode(), "http страница не найдена")
+		}
+	})
 }

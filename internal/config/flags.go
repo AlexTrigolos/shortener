@@ -2,43 +2,55 @@ package config
 
 import (
 	"errors"
+	"log/slog"
 	"net/url"
 	"os"
 
+	"github.com/caarlos0/env/v6"
 	"github.com/spf13/pflag"
 )
 
 type Config struct {
-	addr    string
-	baseURL string
+	Addr            string `env:"SERVER_ADDRESS"`
+	BaseURL         string `env:"BASE_URL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 }
 
 func (c *Config) prepareURL() error {
-	parsed, err := url.Parse(c.baseURL)
+	parsed, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return errors.New("ошибка парсинга флага")
 	} else if parsed.Scheme == "" || parsed.Host == "" {
 		return errors.New("флаг не является ссылкой")
 	}
-	c.baseURL = parsed.Scheme + "://" + parsed.Host
+	c.BaseURL = parsed.Scheme + "://" + parsed.Host
 	return nil
 }
 
 func (c Config) GetServerAddr() string {
-	return c.addr
+	return c.Addr
 }
 
 func (c Config) GetBaseURL() string {
-	return c.baseURL
+	return c.BaseURL
 }
 
 func ParseFlags() (Config, error) {
 	f := pflag.NewFlagSet("app", pflag.ExitOnError)
 	config := Config{}
-	f.StringVarP(&config.addr, "addr", "a", ":8080", "address and port to run server")
-	f.StringVarP(&config.baseURL, "base-url", "b", "http://localhost:8080/unknown_short_url", "host (and port) for short urls")
+
+	f.StringVarP(&config.Addr, "addr", "a", ":8080", "address and port to run server")
+	f.StringVarP(&config.BaseURL, "base-url", "b", "http://localhost:8080/unknown_short_url", "host (and port) for short urls")
+	f.StringVarP(&config.FileStoragePath, "file-storage-path", "f", "./urls_storage.json", "path to file storage for save urls")
 	f.Parse(os.Args[1:])
-	err := config.prepareURL()
+
+	err := env.Parse(&config)
+	if err != nil {
+		logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+		logger.Error("не удалось распарсить переменные окружения", "error", err)
+	}
+
+	err = config.prepareURL()
 	if err != nil {
 		return config, err
 	}

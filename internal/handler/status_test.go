@@ -22,6 +22,7 @@ func TestStatusHandler(t *testing.T) {
 
 		resp, err := req.Send()
 		require.NoError(t, err)
-		assert.Equal(t, "Сервер запущен :)", string(resp.Body()))
+		assert.Equal(t, 200, resp.StatusCode())
+		assert.Equal(t, "Server started :)", string(resp.Body()))
 	})
 }

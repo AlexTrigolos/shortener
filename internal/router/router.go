@@ -1,11 +1,13 @@
 package router
 
 import (
-	"github.com/AlexTrigolos/shortener/internal/handler"
-	"github.com/AlexTrigolos/shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/thanhpk/randstr"
+
+	"github.com/AlexTrigolos/shortener/internal/handler"
+	"github.com/AlexTrigolos/shortener/internal/service"
+	api_handler "github.com/AlexTrigolos/shortener/internal/handler/api"
 )
 
 type GetterSetter interface {
@@ -24,10 +26,12 @@ func NewGenerateRouter(nu GetterSetter) *GenerateRouter {
 func (gr *GenerateRouter) GenerateRoute(baseURL string) (chi.Router, error) {
 	r := chi.NewRouter()
 
-	r.Use(middleware.ClientIPFromRemoteAddr, middleware.Logger, middleware.Recoverer)
+	// middleware.Logger убрал втоматическое логирование
+	r.Use(middleware.ClientIPFromRemoteAddr, middleware.Recoverer)
 
 	generateURL := service.NewGenerateURL(randstr.String, gr.newURL)
 	compact := handler.NewCompact(generateURL)
+	apiCompact := api_handler.NewCompact(generateURL)
 
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", handler.StatusHandler)
@@ -35,6 +39,7 @@ func (gr *GenerateRouter) GenerateRoute(baseURL string) (chi.Router, error) {
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handler.GetHandler(gr.newURL))
 		})
+		r.Post("/api/shorten", apiCompact.CompactHandler(baseURL))
 	})
 
 	return r, nil

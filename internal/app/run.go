@@ -28,13 +28,13 @@ func (a App) RunApp() {
 	errExitWithLog(server, err)
 	flags := server.Flags
 
-	newURL, err := model.NewURL()
+	newURL, err := model.NewURL(server.Flags.FileStoragePath)
 	errExitWithLog(server, err)
 	r := router.NewGenerateRouter(newURL)
 
 	rtr, err := r.GenerateRoute(flags.GetBaseURL())
 	errExitWithLog(server, err)
 
-	err = server.ListenAndServe(flags.GetServerAddr(), rtr)
+	err = server.ListenAndServe(flags.GetServerAddr(), server.GzipMiddleware(server.LoggerMiddleware(rtr)))
 	errExitWithLog(server, err)
 }
