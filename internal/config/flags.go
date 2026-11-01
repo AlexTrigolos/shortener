@@ -2,11 +2,10 @@ package config
 
 import (
 	"errors"
-	"log/slog"
 	"net/url"
 	"os"
 
-	"github.com/caarlos0/env/v6"
+	"github.com/caarlos0/env/v11"
 	"github.com/spf13/pflag"
 )
 
@@ -46,8 +45,7 @@ func ParseFlags() (Config, error) {
 
 	err := env.Parse(&config)
 	if err != nil {
-		logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-		logger.Error("не удалось распарсить переменные окружения", "error", err)
+		return config, err
 	}
 
 	err = config.prepareURL()

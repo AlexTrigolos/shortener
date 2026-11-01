@@ -1,31 +1,36 @@
 package config
 
 import (
-	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/AlexTrigolos/shortener/internal/config/middleware"
+	"go.uber.org/zap"
 )
 
 type Server struct {
 	ListenAndServe   func(addr string, handler http.Handler) error
 	Flags            Config
-	Logger           *slog.Logger
+	Logger           *zap.Logger
 	LoggerMiddleware func(h http.Handler) http.Handler
 	GzipMiddleware   func(h http.Handler) http.Handler
 }
 
 func PrepareServer() (*Server, error) {
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		return &Server{}, err
+	}
+	defer logger.Sync()
+
 	flags, err := ParseFlags()
 	if err != nil {
-		return &Server{Logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}, err
+		return &Server{Logger: logger}, err
 	}
 	server := &Server{
 		ListenAndServe:   http.ListenAndServe,
 		Flags:            flags,
-		Logger:           slog.New(slog.NewTextHandler(os.Stdout, nil)),
-		LoggerMiddleware: middleware.LoggerMiddleware,
+		Logger:           logger,
+		LoggerMiddleware: middleware.LoggerMiddleware(logger),
 		GzipMiddleware:   middleware.GzipMiddleware,
 	}
 	return server, nil

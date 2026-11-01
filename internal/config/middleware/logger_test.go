@@ -8,6 +8,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func Test_loggingResponseWriter_Write(t *testing.T) {
@@ -69,14 +70,16 @@ func TestLoggerMiddleware(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := http.HandlerFunc(tt.handlerFunc)
-			srv := httptest.NewServer(LoggerMiddleware(handler))
+			logger, err := zap.NewDevelopment()
+			require.NoError(t, err)
+			srv := httptest.NewServer(LoggerMiddleware(logger)(handler))
 			defer srv.Close()
 
 			req := resty.New().R()
 			req.Method = http.MethodGet
 			req.URL = srv.URL
 
-			_, err := req.Send()
+			_, err = req.Send()
 			require.NoError(t, err)
 		})
 	}

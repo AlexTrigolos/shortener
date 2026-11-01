@@ -19,16 +19,24 @@ func newCompressWriter(w http.ResponseWriter) *compressWriter {
 	}
 }
 
+func (c *compressWriter) validContentType() bool {
+	contentType := c.w.Header().Get("Content-Type")
+	return strings.Contains(contentType, "application/json") || strings.Contains(contentType, "text/html") || strings.Contains(contentType, "text/plain")
+}
+
 func (c *compressWriter) Header() http.Header {
 	return c.w.Header()
 }
 
 func (c *compressWriter) Write(p []byte) (int, error) {
-	return c.zw.Write(p)
+	if c.validContentType() {
+		return c.zw.Write(p)
+	}
+	return c.w.Write(p)
 }
 
 func (c *compressWriter) WriteHeader(statusCode int) {
-	if statusCode < 300 {
+	if c.validContentType() {
 		c.w.Header().Set("Content-Encoding", "gzip")
 	}
 	c.w.WriteHeader(statusCode)
@@ -68,36 +76,22 @@ func (c *compressReader) Close() error {
 
 func GzipMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		acceptContentType := r.Header.Get("Accept")
-		if validContentType(acceptContentType) {
-			acceptEncoding := r.Header.Get("Accept-Encoding")
-			supportsGzip := strings.Contains(acceptEncoding, "gzip")
-			if supportsGzip {
-				cw := newCompressWriter(w)
-				defer cw.Close()
-				w = cw
-			}
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			cw := newCompressWriter(w)
+			defer cw.Close()
+			w = cw
 		}
 
-		contentContentType := r.Header.Get("Content-Type")
-		if validContentType(contentContentType) {
-			contentEncoding := r.Header.Get("Content-Encoding")
-			sendsGzip := strings.Contains(contentEncoding, "gzip")
-			if sendsGzip {
-				cr, err := newCompressReader(r.Body)
-				if err != nil {
-					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-					return
-				}
-				defer cr.Close()
-				r.Body = cr
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			cr, err := newCompressReader(r.Body)
+			if err != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
 			}
+			defer cr.Close()
+			r.Body = cr
 		}
 
 		h.ServeHTTP(w, r)
 	})
-}
-
-func validContentType(contentType string) bool {
-	return strings.Contains(contentType, "application/json") || strings.Contains(contentType, "text/html") || strings.Contains(contentType, "text/plain")
 }

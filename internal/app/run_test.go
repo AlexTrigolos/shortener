@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"os"
 	"testing"
@@ -10,6 +9,7 @@ import (
 	"github.com/AlexTrigolos/shortener/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func mockLoggerMiddleware(successLogger *int) func(h http.Handler) http.Handler {
@@ -33,20 +33,20 @@ func mockSuccessListenAndServe(successLAS *int) func(addr string, handler http.H
 	}
 }
 
-func mockPrepareServer(successLogger *int, successGzip *int, filename string, mockLAS func(addr string, handler http.Handler) error) func() (*config.Server, error) {
+func mockPrepareServer(successLogger *int, successGzip *int, filename string, mockLAS func(addr string, handler http.Handler) error, logger *zap.Logger) func() (*config.Server, error) {
 	return func() (*config.Server, error) {
 		return &config.Server{
 			ListenAndServe:   mockLAS,
 			Flags:            config.Config{FileStoragePath: filename},
-			Logger:           slog.New(slog.NewTextHandler(os.Stdout, nil)),
+			Logger:           logger,
 			LoggerMiddleware: mockLoggerMiddleware(successLogger),
 			GzipMiddleware:   mockGzipMiddleware(successGzip),
 		}, nil
 	}
 }
 
-func mockApp(successLogger *int, successGzip *int, filename string, mockLAS func(addr string, handler http.Handler) error) *App {
-	serverFunc := mockPrepareServer(successLogger, successGzip, filename, mockLAS)
+func mockApp(successLogger *int, successGzip *int, filename string, mockLAS func(addr string, handler http.Handler) error, logger *zap.Logger) *App {
+	serverFunc := mockPrepareServer(successLogger, successGzip, filename, mockLAS, logger)
 	return &App{prepareServer: serverFunc}
 }
 
@@ -63,6 +63,7 @@ func TestRunApp(t *testing.T) {
 	defer os.RemoveAll(dirname)
 	file, err := os.CreateTemp(dirname, "*_file.json")
 	require.NoError(t, err)
+	defer file.Close()
 	filename := file.Name()
 	fileData, err := json.Marshal([]string{})
 	require.NoError(t, err)
@@ -83,7 +84,7 @@ func TestRunApp(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			successLAS, successLogger, successGzip := 0, 0, 0
-			app := mockApp(&successLogger, &successGzip, filename, tt.mockListenAndServe(&successLAS))
+			app := mockApp(&successLogger, &successGzip, filename, tt.mockListenAndServe(&successLAS), &zap.Logger{})
 			assert.NotPanics(t, app.RunApp)
 			if tt.ok {
 				assert.Equal(t, 1, successLAS)

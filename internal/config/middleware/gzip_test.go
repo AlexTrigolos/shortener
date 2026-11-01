@@ -3,14 +3,13 @@ package middleware
 import (
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/AlexTrigolos/shortener/internal/handler"
 	"github.com/AlexTrigolos/shortener/internal/handler/api"
@@ -23,20 +22,10 @@ func mockRandStr(n int, letters ...string) string {
 }
 
 func TestGzipMiddleware(t *testing.T) {
-	dirname := t.TempDir()
-	defer os.RemoveAll(dirname)
-	file, err := os.CreateTemp(dirname, "*_file.json")
-	require.NoError(t, err)
-	filename := file.Name()
-	fileData, err := json.Marshal([]string{})
-	require.NoError(t, err)
-	_, err = file.Write(fileData)
-	require.NoError(t, err)
-
 	t.Run("sends_gzip", func(t *testing.T) {
-		urls, err := model.NewURL(filename)
+		urls, err := model.NewURL()
 		require.NoError(t, err)
-		handler := GzipMiddleware(http.HandlerFunc(api.NewCompact(service.NewGenerateURL(mockRandStr, urls)).CompactHandler("https://host:port")))
+		handler := GzipMiddleware(http.HandlerFunc(api.NewCompact(service.NewGenerateURL(mockRandStr, urls), &zap.Logger{}).CompactHandler("https://host:port")))
 		srv := httptest.NewServer(handler)
 		defer srv.Close()
 		requestBody := `{"url": "https://google.com"}`
@@ -52,7 +41,6 @@ func TestGzipMiddleware(t *testing.T) {
 		r := httptest.NewRequest("POST", srv.URL+"/api/shorten", buf)
 		r.RequestURI = ""
 		r.Header.Set("Content-Encoding", "gzip")
-		r.Header.Set("Content-Type", "application/json")
 
 		resp, err := http.DefaultClient.Do(r)
 		require.NoError(t, err)
@@ -75,7 +63,6 @@ func TestGzipMiddleware(t *testing.T) {
 		r := httptest.NewRequest("GET", srv.URL, buf)
 		r.RequestURI = ""
 		r.Header.Set("Accept-Encoding", "gzip")
-		r.Header.Set("Accept", "text/plain")
 
 		resp, err := http.DefaultClient.Do(r)
 		require.NoError(t, err)

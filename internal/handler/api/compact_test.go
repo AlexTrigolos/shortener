@@ -1,13 +1,11 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/AlexTrigolos/shortener/internal/model"
@@ -17,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thanhpk/randstr"
+	"go.uber.org/zap"
 )
 
 const (
@@ -37,23 +36,15 @@ func (mg MockFailGenerator) GenerateAndSetUniqURL(string) (string, error) {
 }
 
 func TestNewCompact(t *testing.T) {
-	dirname := t.TempDir()
-	defer os.RemoveAll(dirname)
-	file, err := os.CreateTemp(dirname, "*_file.json")
-	require.NoError(t, err)
-	filename := file.Name()
-	fileData, err := json.Marshal([]string{})
-	require.NoError(t, err)
-	_, err = file.Write(fileData)
-	require.NoError(t, err)
+	logger := &zap.Logger{}
 
-	urls, err := model.NewURL(filename)
+	urls, err := model.NewURL()
 	require.NoError(t, err)
 	generator := service.NewGenerateURL(randstr.String, urls)
 	t.Run("создать новый Compact", func(t *testing.T) {
-		newCompact := NewCompact(generator)
+		newCompact := NewCompact(generator, logger)
 
-		expectedCompact := &Compact{generator: generator, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
+		expectedCompact := &Compact{generator: generator, logger: logger}
 		require.IsType(t, expectedCompact, newCompact)
 		assert.Equal(t, reflect.ValueOf(expectedCompact.generator), reflect.ValueOf(newCompact.generator))
 		assert.Equal(t, expectedCompact.logger, newCompact.logger)
@@ -61,17 +52,10 @@ func TestNewCompact(t *testing.T) {
 }
 
 func TestCompactHandler(t *testing.T) {
-	dirname := t.TempDir()
-	defer os.RemoveAll(dirname)
-	file, err := os.CreateTemp(dirname, "*_file.json")
-	require.NoError(t, err)
-	filename := file.Name()
-	fileData, err := json.Marshal([]string{})
-	require.NoError(t, err)
-	_, err = file.Write(fileData)
+	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	urls, err := model.NewURL(filename)
+	urls, err := model.NewURL()
 	require.NoError(t, err)
 
 	handler := chi.NewRouter()
@@ -118,6 +102,16 @@ func TestCompactHandler(t *testing.T) {
 			},
 		},
 		{
+			name:            "передан слишком длинный url",
+			body:            "{\"url\":\"" + strings.Repeat("a", 1020) + "\"}",
+			generatorStruct: MockGenerator{},
+			want: want{
+				statusCode:  413,
+				contentType: "text/plain; charset=utf-8",
+				response:    "тело запроса слишком большое\n",
+			},
+		},
+		{
 			name:            "сломался генератор",
 			body:            "{\"url\":\"http://long.url\"}",
 			generatorStruct: MockFailGenerator{},
@@ -130,7 +124,7 @@ func TestCompactHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			apiCompact := NewCompact(tt.generatorStruct)
+			apiCompact := NewCompact(tt.generatorStruct, logger)
 			handler.Post("/api/shorten", apiCompact.CompactHandler(baseURL))
 			srv := httptest.NewServer(handler)
 			defer srv.Close()

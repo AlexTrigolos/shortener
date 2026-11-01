@@ -1,9 +1,7 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -26,31 +24,27 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.status = statusCode
 }
 
-func LoggerMiddleware(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger, err := zap.NewDevelopment()
-		if err != nil {
-			panic(err)
-		}
-		defer logger.Sync()
+func LoggerMiddleware(logger *zap.Logger) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sugar := *logger.Sugar()
 
-		sugar := *logger.Sugar()
+			start := time.Now()
 
-		start := time.Now()
+			lw := loggingResponseWriter{
+				ResponseWriter: w,
+				status:         0,
+				size:           0,
+			}
 
-		lw := loggingResponseWriter{
-			ResponseWriter: w,
-			status:         0,
-			size:           0,
-		}
+			h.ServeHTTP(&lw, r)
 
-		h.ServeHTTP(&lw, r)
+			duration := time.Since(start)
 
-		duration := time.Since(start)
-
-		sugar.Infoln(
-			"Request Data: uri -", r.RequestURI+",", "method -", r.Method+",", "duration -", fmt.Sprint(duration)+".",
-			"Response Data: status -", strconv.Itoa(lw.status)+",", "size -", strconv.Itoa(lw.size)+".",
-		)
-	})
+			sugar.Infoln(
+				"Request Data:", zap.String("uri", r.RequestURI), zap.String("method", r.Method), zap.Duration("duration", duration),
+				"Response Data:", zap.Int("status", lw.status), zap.Int("size", lw.size),
+			)
+		})
+	}
 }
