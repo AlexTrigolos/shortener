@@ -52,9 +52,6 @@ func TestNewCompact(t *testing.T) {
 }
 
 func TestCompactHandler(t *testing.T) {
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
-
 	urls, err := model.NewURL()
 	require.NoError(t, err)
 
@@ -124,7 +121,7 @@ func TestCompactHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			apiCompact := NewCompact(tt.generatorStruct, logger)
+			apiCompact := NewCompact(tt.generatorStruct, zap.NewNop())
 			handler.Post("/api/shorten", apiCompact.CompactHandler(baseURL))
 			srv := httptest.NewServer(handler)
 			defer srv.Close()

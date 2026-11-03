@@ -59,7 +59,10 @@ func (uwf *URLWithFile) load() error {
 		return err
 	}
 	for _, el := range *jsonData {
-		uwf.URL.Set(el["short_url"], el["original_url"])
+		err = uwf.URL.Set(el["short_url"], el["original_url"])
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
@@ -24,7 +25,8 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1024))
 		if err != nil {
-			if err.Error() == "http: request body too large" {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
 				http.Error(w, "тело запроса слишком большое", http.StatusRequestEntityTooLarge)
 				return
 			}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"testing"
@@ -33,20 +34,20 @@ func mockSuccessListenAndServe(successLAS *int) func(addr string, handler http.H
 	}
 }
 
-func mockPrepareServer(successLogger *int, successGzip *int, filename string, mockLAS func(addr string, handler http.Handler) error, logger *zap.Logger) func() (*config.Server, error) {
+func mockPrepareServer(successLogger *int, successGzip *int, filename string, successLAS *int, logger *zap.Logger, err error) func() (*config.Server, error) {
 	return func() (*config.Server, error) {
 		return &config.Server{
-			ListenAndServe:   mockLAS,
+			ListenAndServe:   mockSuccessListenAndServe(successLAS),
 			Flags:            config.Config{FileStoragePath: filename},
 			Logger:           logger,
 			LoggerMiddleware: mockLoggerMiddleware(successLogger),
 			GzipMiddleware:   mockGzipMiddleware(successGzip),
-		}, nil
+		}, err
 	}
 }
 
-func mockApp(successLogger *int, successGzip *int, filename string, mockLAS func(addr string, handler http.Handler) error, logger *zap.Logger) *App {
-	serverFunc := mockPrepareServer(successLogger, successGzip, filename, mockLAS, logger)
+func mockApp(successLogger *int, successGzip *int, filename string, successLAS *int, logger *zap.Logger, err error) *App {
+	serverFunc := mockPrepareServer(successLogger, successGzip, filename, successLAS, logger, err)
 	return &App{prepareServer: serverFunc}
 }
 
@@ -72,24 +73,40 @@ func TestRunApp(t *testing.T) {
 
 	tests := []struct {
 		name               string
-		mockListenAndServe func(success *int) func(addr string, handler http.Handler) error
-		ok                 bool
+		logger             *zap.Logger
+		serverErr          error
+		errMessage         string
 	}{
 		{
 			name:               "удачный запуск",
-			mockListenAndServe: mockSuccessListenAndServe,
-			ok:                 true,
+			logger:             zap.NewNop(),
+			serverErr:          nil,
+			errMessage:         "",
+		},
+		{
+			name:               "ошибка создания логера",
+			logger:             zap.NewNop(),
+			serverErr:          errors.New("что-то сломалось"),
+			errMessage:         "что-то сломалось",
+		},
+		{
+			name:               "ошибка подготовки сервера",
+			logger:             nil,
+			serverErr:          errors.New("не удалось создать логгер"),
+			errMessage:         "не удалось создать логгер",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			successLAS, successLogger, successGzip := 0, 0, 0
-			app := mockApp(&successLogger, &successGzip, filename, tt.mockListenAndServe(&successLAS), &zap.Logger{})
-			assert.NotPanics(t, app.RunApp)
-			if tt.ok {
+			app := mockApp(&successLogger, &successGzip, filename, &successLAS, tt.logger, tt.serverErr)
+			err := app.RunApp()
+			if tt.errMessage == "" {
+				require.NoError(t, err)
 				assert.Equal(t, 1, successLAS)
 				assert.Equal(t, 1, successLogger)
 			} else {
+				require.ErrorContains(t, err, tt.errMessage)
 				assert.Equal(t, 0, successLAS)
 				assert.Equal(t, 0, successLogger)
 			}

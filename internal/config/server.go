@@ -20,7 +20,6 @@ func PrepareServer() (*Server, error) {
 	if err != nil {
 		return &Server{}, err
 	}
-	defer logger.Sync()
 
 	flags, err := ParseFlags()
 	if err != nil {

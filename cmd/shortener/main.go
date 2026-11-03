@@ -1,8 +1,15 @@
 package main
 
-import "github.com/AlexTrigolos/shortener/internal/app"
+import (
+	"os"
+
+	"github.com/AlexTrigolos/shortener/internal/app"
+)
 
 func main() {
 	app := app.NewApp()
-	app.RunApp()
+	err := app.RunApp()
+	if err != nil {
+		os.Exit(1)
+	}
 }

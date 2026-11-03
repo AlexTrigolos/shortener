@@ -10,19 +10,19 @@ import (
 	"go.uber.org/zap"
 )
 
-func errExitWithLog(logger *zap.Logger, err error) {
-	if err != nil {
-		logger.Error("запуск сервера", zap.String("Error", err.Error()))
-		os.Exit(1)
-	}
+func logAndReturnError(logger *zap.Logger, err error) error {
+	logger.Error("запуск сервера", zap.String("Error", err.Error()))
+	return err
 }
 
-func invalidLogger(logger *zap.Logger, err error) {
-	if logger == nil {
-		lg := slog.New(slog.NewTextHandler(os.Stdout, nil))
-		lg.Error("не удалось создать zap логер", "error", err)
-		os.Exit(1)
+func invalidLogger(logger *zap.Logger, err error) bool {
+	if logger != nil {
+		return false
 	}
+
+	lg := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	lg.Error("не удалось создать zap логер", "error", err)
+	return true
 }
 
 type App struct {
@@ -33,20 +33,35 @@ func NewApp() *App {
 	return &App{prepareServer: config.PrepareServer}
 }
 
-func (a App) RunApp() {
+func (a App) RunApp() error {
 	server, err := a.prepareServer()
+
 	logger := server.Logger
-	invalidLogger(server.Logger, err)
-	errExitWithLog(logger, err)
+	if invalidLogger(logger, err) {
+		return err
+	}
+	defer logger.Sync()
+
+	if err != nil {
+		return logAndReturnError(logger, err)
+	}
+
 	flags := server.Flags
 
 	newURLWithFile, err := model.NewURLWithFile(server.Flags.FileStoragePath)
-	errExitWithLog(logger, err)
+	if err != nil {
+		return logAndReturnError(logger, err)
+	}
 	r := router.NewGenerateRouter(newURLWithFile)
 
 	rtr, err := r.GenerateRoute(flags.GetBaseURL(), server)
-	errExitWithLog(logger, err)
+	if err != nil {
+		return logAndReturnError(logger, err)
+	}
 
 	err = server.ListenAndServe(flags.GetServerAddr(), rtr)
-	errExitWithLog(logger, err)
+	if err != nil {
+		return logAndReturnError(logger, err)
+	}
+	return nil
 }

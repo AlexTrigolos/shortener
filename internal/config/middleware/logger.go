@@ -15,7 +15,12 @@ type loggingResponseWriter struct {
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	size, err := r.ResponseWriter.Write(b)
-	r.size += size
+	if err == nil {
+		r.size += size
+		if r.status == 0 {
+			r.status = http.StatusOK
+		}
+	}
 	return size, err
 }
 
@@ -27,8 +32,6 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 func LoggerMiddleware(logger *zap.Logger) func(h http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			sugar := *logger.Sugar()
-
 			start := time.Now()
 
 			lw := loggingResponseWriter{
@@ -41,9 +44,9 @@ func LoggerMiddleware(logger *zap.Logger) func(h http.Handler) http.Handler {
 
 			duration := time.Since(start)
 
-			sugar.Infoln(
-				"Request Data:", zap.String("uri", r.RequestURI), zap.String("method", r.Method), zap.Duration("duration", duration),
-				"Response Data:", zap.Int("status", lw.status), zap.Int("size", lw.size),
+			logger.Info(
+				"Data: ", zap.String("uri", r.RequestURI), zap.String("method", r.Method), zap.Duration("duration", duration),
+				zap.Int("status", lw.status), zap.Int("size", lw.size),
 			)
 		})
 	}

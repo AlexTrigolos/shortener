@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -28,7 +29,8 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
 		defer r.Body.Close()
 		if err := dec.Decode(&req); err != nil {
-			if err.Error() == "http: request body too large" {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
 				http.Error(w, "тело запроса слишком большое", http.StatusRequestEntityTooLarge)
 				return
 			}
