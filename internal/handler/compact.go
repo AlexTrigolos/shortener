@@ -1,10 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"io"
-	"log/slog"
 	"net/http"
-	"os"
+
+	"go.uber.org/zap"
 )
 
 type URLGenerator interface {
@@ -13,17 +14,23 @@ type URLGenerator interface {
 
 type Compact struct {
 	generator URLGenerator
-	logger    *slog.Logger
+	logger    *zap.Logger
 }
 
-func NewCompact(guu URLGenerator) *Compact {
-	return &Compact{generator: guu, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}
+func NewCompact(ug URLGenerator, logger *zap.Logger) *Compact {
+	return &Compact{generator: ug, logger: logger}
 }
 
 func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1024))
 		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				http.Error(w, "тело запроса слишком большое", http.StatusRequestEntityTooLarge)
+				return
+			}
+
 			http.Error(w, "не удалось прочитать тело запроса", http.StatusBadRequest)
 			return
 		}
@@ -37,7 +44,7 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 
 		short, err := c.generator.GenerateAndSetUniqURL(originalURL)
 		if err != nil {
-			c.logger.Error("создание короткой ссылки", "error", err)
+			c.logger.Error("создание короткой ссылки", zap.String("Error", err.Error()))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}

@@ -1,7 +1,8 @@
 package app
 
 import (
-	"log/slog"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"testing"
@@ -9,27 +10,44 @@ import (
 	"github.com/AlexTrigolos/shortener/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
-func mockSuccessListenAndServe(success *int) func(addr string, handler http.Handler) error {
+func mockLoggerMiddleware(successLogger *int) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		*successLogger++
+		return h
+	}
+}
+
+func mockGzipMiddleware(successGzip *int) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		*successGzip++
+		return h
+	}
+}
+
+func mockSuccessListenAndServe(successLAS *int) func(addr string, handler http.Handler) error {
 	return func(addr string, handler http.Handler) error {
-		*success++
+		*successLAS++
 		return nil
 	}
 }
 
-func mockPrepareServer(mockLAS func(addr string, handler http.Handler) error) func() (*config.Server, error) {
+func mockPrepareServer(successLogger *int, successGzip *int, filename string, successLAS *int, logger *zap.Logger, err error) func() (*config.Server, error) {
 	return func() (*config.Server, error) {
 		return &config.Server{
-			ListenAndServe: mockLAS,
-			Flags:          config.Config{},
-			Logger:         slog.New(slog.NewTextHandler(os.Stdout, nil)),
-		}, nil
+			ListenAndServe:   mockSuccessListenAndServe(successLAS),
+			Flags:            config.Config{FileStoragePath: filename},
+			Logger:           logger,
+			LoggerMiddleware: mockLoggerMiddleware(successLogger),
+			GzipMiddleware:   mockGzipMiddleware(successGzip),
+		}, err
 	}
 }
 
-func mockApp(mockLAS func(addr string, handler http.Handler) error) *App {
-	serverFunc := mockPrepareServer(mockLAS)
+func mockApp(successLogger *int, successGzip *int, filename string, successLAS *int, logger *zap.Logger, err error) *App {
+	serverFunc := mockPrepareServer(successLogger, successGzip, filename, successLAS, logger, err)
 	return &App{prepareServer: serverFunc}
 }
 
@@ -42,26 +60,55 @@ func TestNewApp(t *testing.T) {
 }
 
 func TestRunApp(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	defer file.Close()
+	filename := file.Name()
+	fileData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+	_, err = file.Write(fileData)
+	require.NoError(t, err)
+
 	tests := []struct {
 		name               string
-		mockListenAndServe func(success *int) func(addr string, handler http.Handler) error
-		ok                 bool
+		logger             *zap.Logger
+		serverErr          error
+		errMessage         string
 	}{
 		{
 			name:               "удачный запуск",
-			mockListenAndServe: mockSuccessListenAndServe,
-			ok:                 true,
+			logger:             zap.NewNop(),
+			serverErr:          nil,
+			errMessage:         "",
+		},
+		{
+			name:               "ошибка создания логера",
+			logger:             zap.NewNop(),
+			serverErr:          errors.New("что-то сломалось"),
+			errMessage:         "что-то сломалось",
+		},
+		{
+			name:               "ошибка подготовки сервера",
+			logger:             nil,
+			serverErr:          errors.New("не удалось создать логгер"),
+			errMessage:         "не удалось создать логгер",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			success := 0
-			app := mockApp(tt.mockListenAndServe(&success))
-			assert.NotPanics(t, app.RunApp)
-			if tt.ok {
-				assert.Equal(t, 1, success)
+			successLAS, successLogger, successGzip := 0, 0, 0
+			app := mockApp(&successLogger, &successGzip, filename, &successLAS, tt.logger, tt.serverErr)
+			err := app.RunApp()
+			if tt.errMessage == "" {
+				require.NoError(t, err)
+				assert.Equal(t, 1, successLAS)
+				assert.Equal(t, 1, successLogger)
 			} else {
-				assert.Equal(t, 0, success)
+				require.ErrorContains(t, err, tt.errMessage)
+				assert.Equal(t, 0, successLAS)
+				assert.Equal(t, 0, successLogger)
 			}
 		})
 	}
