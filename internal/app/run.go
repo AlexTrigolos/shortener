@@ -1,8 +1,11 @@
 package app
 
 import (
+	"database/sql"
 	"log/slog"
 	"os"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/AlexTrigolos/shortener/internal/config"
 	"github.com/AlexTrigolos/shortener/internal/model"
@@ -52,14 +55,21 @@ func (a App) RunApp() error {
 	if err != nil {
 		return logAndReturnError(logger, err)
 	}
-	r := router.NewGenerateRouter(newURLWithFile)
 
-	rtr, err := r.GenerateRoute(flags.GetBaseURL(), server)
+	db, err := sql.Open("pgx", flags.DataBase)
+	if err != nil {
+		return logAndReturnError(logger, err)
+	}
+	defer db.Close()
+
+	r := router.NewGenerateRouter(db, newURLWithFile)
+
+	rtr, err := r.GenerateRoute(flags.BaseURL, server)
 	if err != nil {
 		return logAndReturnError(logger, err)
 	}
 
-	err = server.ListenAndServe(flags.GetServerAddr(), rtr)
+	err = server.ListenAndServe(flags.Addr, rtr)
 	if err != nil {
 		return logAndReturnError(logger, err)
 	}
