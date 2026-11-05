@@ -1,6 +1,8 @@
 package router
 
 import (
+	"context"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/thanhpk/randstr"
@@ -16,12 +18,17 @@ type GetterSetter interface {
 	Get(key string) (string, error)
 }
 
+type DB interface {
+	PingContext(ctx context.Context) error
+}
+
 type GenerateRouter struct {
+	db DB
 	newURL GetterSetter
 }
 
-func NewGenerateRouter(nu GetterSetter) *GenerateRouter {
-	return &GenerateRouter{newURL: nu}
+func NewGenerateRouter(db DB, nu GetterSetter) *GenerateRouter {
+	return &GenerateRouter{db: db, newURL: nu}
 }
 
 func (gr *GenerateRouter) GenerateRoute(baseURL string, server *config.Server) (chi.Router, error) {
@@ -33,10 +40,12 @@ func (gr *GenerateRouter) GenerateRoute(baseURL string, server *config.Server) (
 	generateURL := service.NewGenerateURL(randstr.String, gr.newURL)
 	compact := handler.NewCompact(generateURL, server.Logger)
 	apiCompact := api_handler.NewCompact(generateURL, server.Logger)
+	ping := handler.NewPing(gr.db, server.Logger)
 
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", handler.StatusHandler)
 		r.Post("/", compact.CompactHandler(baseURL))
+		r.Get("/ping", ping.PingHandler())
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handler.GetHandler(gr.newURL))
 		})
