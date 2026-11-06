@@ -13,9 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type MockDB struct{}
+type MockedDBURL struct{}
 
-func (mdb MockDB) PingContext(ctx context.Context) error {
+func (mdb MockedDBURL) PingContext(ctx context.Context) error {
+	return nil
+}
+func (mdb MockedDBURL) Get(ctx context.Context, key string) (string, error) {
+	return "", nil
+}
+func (mdb MockedDBURL) Set(ctx context.Context, key, value string) error {
 	return nil
 }
 
@@ -23,19 +29,17 @@ func TestNewGenerateRouter(t *testing.T) {
 	t.Run("создать новый GenerateRouter", func(t *testing.T) {
 		urls1, err := model.NewURL()
 		require.NoError(t, err)
-		newGenerateRouter := NewGenerateRouter(MockDB{}, urls1)
+		newGenerateRouter := NewGenerateRouter(urls1)
 
 		urls2, err := model.NewURL()
 		require.NoError(t, err)
-		require.IsType(t, &GenerateRouter{newURL: urls2}, newGenerateRouter)
+		require.IsType(t, &GenerateRouter{URLs: urls2}, newGenerateRouter)
 	})
 }
 
 func TestGenerateRoute(t *testing.T) {
 	t.Run("удачный сгенерировали роуты", func(t *testing.T) {
-		urls, err := model.NewURL()
-		require.NoError(t, err)
-		gr := NewGenerateRouter(MockDB{}, urls)
+		gr := NewGenerateRouter(&MockedDBURL{})
 		server, err := config.PrepareServer()
 		require.NoError(t, err)
 		router, err := gr.GenerateRoute("flagbaseURL", server)
@@ -57,9 +61,10 @@ func TestGenerateRoute(t *testing.T) {
 			req.URL = srv.URL + request[1]
 
 			resp, err := req.Send()
-			require.NoError(t, err, "не удалось сделать http запрос")
+			require.NoError(t, err)
 
 			assert.NotEqual(t, http.StatusNotFound, resp.StatusCode(), "http страница не найдена")
+			assert.NotEqual(t, http.StatusInternalServerError, resp.StatusCode(), "ошибка выполнения")
 		}
 	})
 }

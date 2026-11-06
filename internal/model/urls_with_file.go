@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -19,15 +20,19 @@ func NewURLWithFile(fileStoragePath string) (*URLWithFile, error) {
 		return nil, errors.New("не удалось создать urls хранилище")
 	}
 	urlWithFile := &URLWithFile{URL: url, fileStoragePath: fileStoragePath}
-	err = urlWithFile.load()
+	err = urlWithFile.load(context.Background()) // контекст не важен, ведь доступа к бд нету
 	if err != nil {
 		return nil, errors.New("не удалось загрузить сохраненные urls сокращения")
 	}
 	return urlWithFile, nil
 }
 
-func (uwf *URLWithFile) Set(key, value string) error {
-	err := uwf.URL.Set(key, value)
+func (uwf *URLWithFile) PingContext(ctx context.Context) error {
+	return errors.New("нет доступа к бд")
+}
+
+func (uwf *URLWithFile) Set(ctx context.Context, key, value string) error {
+	err := uwf.URL.Set(ctx, key, value)
 	if err != nil {
 		return err
 	}
@@ -42,11 +47,11 @@ func (uwf *URLWithFile) Set(key, value string) error {
 	return nil
 }
 
-func (uwf *URLWithFile) Get(key string) (string, error) {
-	return uwf.URL.Get(key)
+func (uwf *URLWithFile) Get(ctx context.Context, key string) (string, error) {
+	return uwf.URL.Get(ctx, key)
 }
 
-func (uwf *URLWithFile) load() error {
+func (uwf *URLWithFile) load(ctx context.Context) error {
 	data, err := os.ReadFile(uwf.fileStoragePath)
 	if errors.Is(err, os.ErrNotExist) {
 		return uwf.createEmpty()
@@ -59,7 +64,7 @@ func (uwf *URLWithFile) load() error {
 		return err
 	}
 	for _, el := range *jsonData {
-		err = uwf.URL.Set(el["short_url"], el["original_url"])
+		err = uwf.URL.Set(ctx, el["short_url"], el["original_url"])
 		if err != nil {
 			return err
 		}

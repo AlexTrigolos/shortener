@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -25,13 +26,13 @@ const (
 
 type MockGenerator struct{}
 
-func (mg MockGenerator) GenerateAndSetUniqURL(string) (string, error) {
+func (mg MockGenerator) GenerateAndSetUniqURL(context.Context, string) (string, error) {
 	return shortURL, nil
 }
 
 type MockFailGenerator struct{}
 
-func (mg MockFailGenerator) GenerateAndSetUniqURL(string) (string, error) {
+func (mg MockFailGenerator) GenerateAndSetUniqURL(context.Context, string) (string, error) {
 	return "", errors.New("исчерпано количество попыток создать короткую ссылку")
 }
 
@@ -116,7 +117,7 @@ func TestCompactHandler(t *testing.T) {
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
 
-			urls.Set("short.url", srv.URL)
+			urls.Set(t.Context(), "short.url", srv.URL)
 
 			req := resty.New().R()
 			req.Method = http.MethodPost

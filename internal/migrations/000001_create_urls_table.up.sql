@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS urls (
+    id SERIAL PRIMARY KEY,
+    short VARCHAR(255) NOT NULL,
+    original VARCHAR(1024) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_urls_short ON urls(short);

@@ -138,7 +138,7 @@ func TestURLWithFile_Set(t *testing.T) {
 				wantFileData = append(wantFileData[:lenWantFileData], newData...)
 			}
 
-			err = urlsWithFile.Set(tt.key, tt.value)
+			err = urlsWithFile.Set(t.Context(), tt.key, tt.value)
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
 			} else {
@@ -180,7 +180,7 @@ func TestURLWithFile_Get(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			urls := tt.urls
-			value, err := urls.Get(tt.key)
+			value, err := urls.Get(t.Context(), tt.key)
 			assert.Equal(t, tt.wantVal, value)
 
 			if tt.wantErr != "" {
@@ -191,4 +191,12 @@ func TestURLWithFile_Get(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestURLWithFile_PingContext(t *testing.T) {
+	t.Run("нет доступа к бд", func(t *testing.T) {
+		uwf := &URLWithFile{}
+		gotErr := uwf.PingContext(t.Context())
+		require.ErrorContains(t, gotErr, "нет доступа к бд")
+	})
 }

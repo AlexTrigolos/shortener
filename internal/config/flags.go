@@ -33,7 +33,7 @@ func ParseFlags() (Config, error) {
 
 	f.StringVarP(&config.Addr, "addr", "a", ":8080", "address and port to run server")
 	f.StringVarP(&config.BaseURL, "base-url", "b", "http://localhost:8080/unknown_short_url", "host (and port) for short urls")
-	f.StringVarP(&config.FileStoragePath, "file-storage-path", "f", "./urls_storage.json", "path to file storage for save urls")
+	f.StringVarP(&config.FileStoragePath, "file-storage-path", "f", "", "path to file storage for save urls")
 	f.StringVarP(&config.DataBase, "data-base", "d", "", "postgresql connection string")
 	f.Parse(os.Args[1:])
 

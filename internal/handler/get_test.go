@@ -20,7 +20,7 @@ func TestGetHandler(t *testing.T) {
 	handler.Get("/{id}", GetHandler(urls))
 	srv := httptest.NewServer(handler)
 
-	urls.Set("short.url", srv.URL)
+	urls.Set(t.Context(), "short.url", srv.URL)
 
 	defer srv.Close()
 

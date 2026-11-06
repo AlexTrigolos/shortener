@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"sync"
 )
@@ -11,11 +12,10 @@ type URL struct {
 }
 
 func NewURL() (*URL, error) {
-	url := &URL{data: make(map[string]string)}
-	return url, nil
+	return &URL{data: make(map[string]string)}, nil
 }
 
-func (u *URL) Set(key, value string) error {
+func (u *URL) Set(_ context.Context, key, value string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	_, exists := u.data[key]
@@ -26,7 +26,7 @@ func (u *URL) Set(key, value string) error {
 	return nil
 }
 
-func (u *URL) Get(key string) (string, error) {
+func (u *URL) Get(_ context.Context, key string) (string, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	value, exists := u.data[key]
@@ -41,4 +41,8 @@ func (u *URL) delete(key string) error {
 	defer u.mu.Unlock()
 	delete(u.data, key)
 	return nil
+}
+
+func (u *URL) PingContext(ctx context.Context) error {
+	return errors.New("нет доступа к бд")
 }
