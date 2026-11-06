@@ -25,7 +25,7 @@ func Test_parseFlags(t *testing.T) {
 			args:            []string{},
 			runAddr:         ":8080",
 			BaseURL:         "http://localhost:8080",
-			FileStoragePath: "./urls_storage.json",
+			FileStoragePath: "",
 			DataBase:        "",
 			wantErr:         "",
 		},

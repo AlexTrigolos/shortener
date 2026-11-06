@@ -53,10 +53,10 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			var executedCount = 0
 			urls, err := model.NewURL()
 			require.NoError(t, err)
-			urls.Set(notUniqURL, "value")
+			urls.Set(t.Context(), notUniqURL, "value")
 
 			newGenerateURL := NewGenerateURL(mockRandStr(&executedCount, tt.mockRand), urls)
-			uniqURL, err := newGenerateURL.GenerateAndSetUniqURL("originalStr")
+			uniqURL, err := newGenerateURL.GenerateAndSetUniqURL(t.Context(), "originalStr")
 
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)

@@ -9,25 +9,11 @@ import (
 )
 
 func TestNewURL(t *testing.T) {
-	tests := []struct {
-		name string
-		want *URL
-	}{
-		{
-			name: "удачное получение",
-			want: &URL{
-				mu:   sync.Mutex{},
-				data: map[string]string{},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			newURL, err := NewURL()
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, newURL)
-		})
-	}
+	t.Run("удачное получение", func(t *testing.T) {
+		newURL, err := NewURL()
+		require.NoError(t, err)
+		assert.Equal(t, &URL{mu: sync.Mutex{}, data: map[string]string{}}, newURL)
+	})
 }
 
 func TestURL_Set(t *testing.T) {
@@ -53,7 +39,7 @@ func TestURL_Set(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := urls.Set(tt.key, tt.value)
+			err := urls.Set(t.Context(), tt.key, tt.value)
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
 			} else {
@@ -88,7 +74,7 @@ func TestURL_Get(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			value, err := urls.Get(tt.key)
+			value, err := urls.Get(t.Context(), tt.key)
 			assert.Equal(t, tt.wantVal, value)
 
 			if tt.wantErr != "" {
@@ -104,15 +90,15 @@ func Test_delete(t *testing.T) {
 	urls := &URL{data: map[string]string{"key1": "value1"}}
 	tests := []struct {
 		name string
-		key string
+		key  string
 	}{
 		{
 			name: "удачное удаление имеющегося",
-			key: "key1",
+			key:  "key1",
 		},
 		{
 			name: "удачное удаление не имеющегося",
-			key: "key0",
+			key:  "key0",
 		},
 	}
 	for _, tt := range tests {
@@ -122,4 +108,13 @@ func Test_delete(t *testing.T) {
 			assert.NotContains(t, urls.data, tt.key)
 		})
 	}
+}
+
+func TestURL_PingContext(t *testing.T) {
+	t.Run("нет доступа к бд", func(t *testing.T) {
+		u, err := NewURL()
+		require.NoError(t, err)
+		gotErr := u.PingContext(t.Context())
+		require.ErrorContains(t, gotErr, "нет доступа к бд")
+	})
 }

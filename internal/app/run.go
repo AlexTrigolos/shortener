@@ -1,11 +1,12 @@
 package app
 
 import (
-	"database/sql"
+	"context"
 	"log/slog"
 	"os"
+	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/AlexTrigolos/shortener/internal/config"
 	"github.com/AlexTrigolos/shortener/internal/model"
@@ -51,18 +52,30 @@ func (a App) RunApp() error {
 
 	flags := server.Flags
 
-	newURLWithFile, err := model.NewURLWithFile(server.Flags.FileStoragePath)
+	var URLs router.GetterSetterDBReady
+	if flags.DataBase != "" {
+		// хз норм или нет, мб на старт бд и миграции не особо и нужен контекст
+		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+		defer cancel()
+
+		db, e := setupDB(ctx, flags.DataBase)
+		if e != nil {
+			return logAndReturnError(logger, err)
+		}
+		defer db.Close()
+
+		URLs, err = model.NewDBURL(db)
+	} else {
+		if flags.FileStoragePath != "" {
+			URLs, err = model.NewURLWithFile(flags.FileStoragePath)
+		} else {
+			URLs, err = model.NewURL()
+		}
+	}
 	if err != nil {
 		return logAndReturnError(logger, err)
 	}
-
-	db, err := sql.Open("pgx", flags.DataBase)
-	if err != nil {
-		return logAndReturnError(logger, err)
-	}
-	defer db.Close()
-
-	r := router.NewGenerateRouter(db, newURLWithFile)
+	r := router.NewGenerateRouter(URLs)
 
 	rtr, err := r.GenerateRoute(flags.BaseURL, server)
 	if err != nil {
