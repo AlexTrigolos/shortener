@@ -7,7 +7,8 @@ import (
 )
 
 type DBURL struct {
-	db *sql.DB
+	db          *sql.DB
+	transaction *sql.Tx
 }
 
 func NewDBURL(db *sql.DB) (*DBURL, error) {
@@ -39,4 +40,43 @@ func (dbu *DBURL) Get(ctx context.Context, key string) (string, error) {
 
 func (dbu *DBURL) PingContext(ctx context.Context) error {
 	return dbu.db.PingContext(ctx)
+}
+
+func (dbu *DBURL) Begin(_ int) (*Transaction, error) {
+	tx, err := dbu.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	dbu.transaction = tx
+	transaction, err := NewTransaction(dbu)
+	if err != nil {
+		return nil, err
+	}
+	return transaction, nil
+}
+
+func (dbu *DBURL) Rollback() error {
+	defer func() { dbu.transaction = nil }()
+	err := dbu.transaction.Rollback()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (dbu *DBURL) Commit() error {
+	defer func() { dbu.transaction = nil }()
+	err := dbu.transaction.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (dbu *DBURL) SetTx(ctx context.Context, key, value string) error {
+	_, err := dbu.transaction.ExecContext(ctx, "INSERT INTO urls (short, original) VALUES ($1, $2)", key, value)
+	if err != nil {
+		return err
+	}
+	return nil
 }

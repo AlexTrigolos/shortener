@@ -7,8 +7,9 @@ import (
 )
 
 type URL struct {
-	mu   sync.Mutex
-	data map[string]string
+	mu                sync.Mutex
+	data              map[string]string
+	transactionBuffer map[string]string
 }
 
 func NewURL() (*URL, error) {
@@ -45,4 +46,49 @@ func (u *URL) delete(key string) error {
 
 func (u *URL) PingContext(ctx context.Context) error {
 	return errors.New("нет доступа к бд")
+}
+
+// имитируем транзакцию
+func (u *URL) Begin(count int) (*Transaction, error) {
+	u.mu.Lock()
+	u.transactionBuffer = make(map[string]string, count)
+	transaction, err := NewTransaction(u)
+	if err != nil {
+		return nil, err
+	}
+	return transaction, nil
+}
+
+func (u *URL) Rollback() error {
+	defer u.mu.Unlock()
+	u.transactionBuffer = nil
+	return nil
+}
+
+func (u *URL) Commit() error {
+	defer u.mu.Unlock()
+	defer func() { u.transactionBuffer = nil}()
+
+	savedKeys := []string{}
+	for k, v := range u.transactionBuffer {
+		_, exists := u.data[k]
+		if exists {
+			for _, delKey := range savedKeys {
+				delete(u.data, delKey)
+			}
+			return errors.New(k + " ключ уже занят")
+		}
+		u.data[k] = v
+		savedKeys = append(savedKeys, k)
+	}
+	return nil
+}
+
+func (u *URL) SetTx(_ context.Context, key, value string) error {
+	_, exists := u.data[key]
+	if exists {
+		return errors.New(key + " ключ уже занят")
+	}
+	u.transactionBuffer[key] = value
+	return nil
 }

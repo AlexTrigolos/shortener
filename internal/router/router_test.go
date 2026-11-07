@@ -24,6 +24,12 @@ func (mdb MockedDBURL) Get(ctx context.Context, key string) (string, error) {
 func (mdb MockedDBURL) Set(ctx context.Context, key, value string) error {
 	return nil
 }
+func (mdb MockedDBURL) Begin(int) (*model.Transaction, error) {
+	return nil, nil
+}
+func (mdb MockedDBURL) SetTx(ctx context.Context, key string, value string) error {
+	return nil
+}
 
 func TestNewGenerateRouter(t *testing.T) {
 	t.Run("создать новый GenerateRouter", func(t *testing.T) {
@@ -54,8 +60,16 @@ func TestGenerateRoute(t *testing.T) {
 		// Get("/ping", handler.PingHandler)
 		// Get("/{id}", handler.GetHandler(newURL))
 		// Post("/api/shorten", handler.CompactHandler(baseURL)
+		// Post("/api/shorten/batch", handler.BatchCompactHandler(baseURL)
 		req := resty.New().R()
-		requests := [5][2]string{{http.MethodGet, ""}, {http.MethodPost, ""}, {http.MethodGet, "/ping"}, {http.MethodGet, "/short"}, {http.MethodPost, "/api/shorten"}}
+		requests := [6][2]string{
+			{http.MethodGet, ""},
+			{http.MethodPost, ""},
+			{http.MethodGet, "/ping"},
+			{http.MethodGet, "/short"},
+			{http.MethodPost, "/api/shorten"},
+			{http.MethodPost, "/api/shorten/batch"},
+		}
 		for _, request := range requests {
 			req.Method = request[0]
 			req.URL = srv.URL + request[1]

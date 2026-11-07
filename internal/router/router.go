@@ -10,6 +10,7 @@ import (
 	"github.com/AlexTrigolos/shortener/internal/config"
 	"github.com/AlexTrigolos/shortener/internal/handler"
 	api_handler "github.com/AlexTrigolos/shortener/internal/handler/api"
+	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/AlexTrigolos/shortener/internal/service"
 )
 
@@ -18,6 +19,8 @@ type GetterSetterDBReady interface {
 	Get(ctx context.Context, key string) (string, error)
 
 	PingContext(ctx context.Context) error
+	Begin(count int) (*model.Transaction, error)
+	SetTx(ctx context.Context, key, value string) error
 }
 
 type GenerateRouter struct {
@@ -37,6 +40,10 @@ func (gr *GenerateRouter) GenerateRoute(baseURL string, server *config.Server) (
 	generateURL := service.NewGenerateURL(randstr.String, gr.URLs)
 	compact := handler.NewCompact(generateURL, server.Logger)
 	apiCompact := api_handler.NewCompact(generateURL, server.Logger)
+
+	batchGenerateURL := service.NewBatchGenerateURL(randstr.String, gr.URLs)
+	apiBatchCompact := api_handler.NewBatchCompact(batchGenerateURL, server.Logger)
+
 	ping := handler.NewPing(gr.URLs, server.Logger)
 
 	r.Route("/", func(r chi.Router) {
@@ -46,7 +53,10 @@ func (gr *GenerateRouter) GenerateRoute(baseURL string, server *config.Server) (
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handler.GetHandler(gr.URLs))
 		})
-		r.Post("/api/shorten", apiCompact.CompactHandler(baseURL))
+		r.Route("/api/shorten", func(r chi.Router) {
+			r.Post("/", apiCompact.CompactHandler(baseURL))
+			r.Post("/batch", apiBatchCompact.BatchCompactHandler(baseURL))
+		})
 	})
 
 	return r, nil

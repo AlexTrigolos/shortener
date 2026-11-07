@@ -51,6 +51,7 @@ func TestNewURLWithFile(t *testing.T) {
 			want: &URLWithFile{
 				URL:             urls,
 				fileStoragePath: filename,
+				transactionBuffer: nil,
 			},
 		},
 		{
@@ -60,6 +61,7 @@ func TestNewURLWithFile(t *testing.T) {
 			want: &URLWithFile{
 				URL:             urls,
 				fileStoragePath: newFilename,
+				transactionBuffer: nil,
 			},
 		},
 	}
@@ -198,5 +200,145 @@ func TestURLWithFile_PingContext(t *testing.T) {
 		uwf := &URLWithFile{}
 		gotErr := uwf.PingContext(t.Context())
 		require.ErrorContains(t, gotErr, "нет доступа к бд")
+	})
+}
+
+func TestURLWithFile_Begin(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	defer file.Close()
+	emptyData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+
+	_, err = file.Write(emptyData)
+	require.NoError(t, err)
+
+	t.Run("удачное создание транзакции", func(t *testing.T) {
+		uwf, err := NewURLWithFile(file.Name())
+		require.NoError(t, err)
+
+		tr, err := uwf.Begin(5)
+		require.NoError(t, err)
+		assert.Equal(t, &Transaction{tx: uwf, commited: false}, tr)
+		assert.NotNil(t, uwf.transactionBuffer)
+		assert.False(t, uwf.URL.mu.TryLock())
+	})
+}
+
+func TestURLWithFile_Rollback(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	defer file.Close()
+	emptyData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+
+	_, err = file.Write(emptyData)
+	require.NoError(t, err)
+
+	t.Run("удачная отмена транзакции", func(t *testing.T) {
+		uwf, err := NewURLWithFile(file.Name())
+		require.NoError(t, err)
+
+		_, err = uwf.Begin(5)
+		require.NoError(t, err)
+
+		err = uwf.Rollback()
+		require.NoError(t, err)
+		assert.Nil(t, uwf.transactionBuffer)
+		assert.True(t, uwf.URL.mu.TryLock())
+	})
+}
+
+func TestURLWithFile_Commit(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	defer file.Close()
+	emptyData, err := json.Marshal([]string{})
+	require.NoError(t, err)
+
+	_, err = file.Write(emptyData)
+	require.NoError(t, err)
+
+	t.Run("удачное завершение транзакции", func(t *testing.T) {
+		uwf, err := NewURLWithFile(file.Name())
+		require.NoError(t, err)
+
+		_, err = uwf.Begin(5)
+		require.NoError(t, err)
+
+		uwf.transactionBuffer["short_1"] = "long_1"
+		uwf.transactionBuffer["short_2"] = "long_2"
+
+		err = uwf.Commit()
+		require.NoError(t, err)
+		assert.Nil(t, uwf.transactionBuffer)
+		assert.True(t, uwf.URL.mu.TryLock())
+
+		assert.Len(t, uwf.URL.data, 2)
+		assert.Contains(t, uwf.URL.data, "short_1")
+		assert.Equal(t, uwf.URL.data["short_1"], "long_1")
+		assert.Contains(t, uwf.URL.data, "short_2")
+		assert.Equal(t, uwf.URL.data["short_2"], "long_2")
+	})
+}
+
+func TestURLWithFile_SetTx(t *testing.T) {
+	dirname := t.TempDir()
+	defer os.RemoveAll(dirname)
+
+	file, err := os.CreateTemp(dirname, "*_file.json")
+	require.NoError(t, err)
+	defer file.Close()
+	data, err := json.MarshalIndent([]map[string]string{{"uuid": "1", "short_url": "key_0", "original_url": "value_0"}}, "", "	")
+	require.NoError(t, err)
+
+	_, err = file.Write(data)
+	require.NoError(t, err)
+
+	t.Run("удачное добавление внутри транзакции", func(t *testing.T) {
+		uwf, err := NewURLWithFile(file.Name())
+		require.NoError(t, err)
+
+		_, err = uwf.Begin(5)
+		require.NoError(t, err)
+
+		err = uwf.SetTx(t.Context(), "key_1", "value_1")
+		require.NoError(t, err)
+		err = uwf.SetTx(t.Context(), "key_2", "value_2")
+		require.NoError(t, err)
+		assert.NotNil(t, uwf.transactionBuffer)
+		assert.False(t, uwf.URL.mu.TryLock())
+
+		assert.Len(t, uwf.URL.data, 1)
+
+		assert.Len(t, uwf.transactionBuffer, 2)
+		assert.Contains(t, uwf.transactionBuffer, "key_1")
+		assert.Equal(t, uwf.transactionBuffer["key_1"], "value_1")
+		assert.Contains(t, uwf.transactionBuffer, "key_2")
+		assert.Equal(t, uwf.transactionBuffer["key_2"], "value_2")
+	})
+	t.Run("неудачное добавление внутри транзакции", func(t *testing.T) {
+		uwf, err := NewURLWithFile(file.Name())
+		require.NoError(t, err)
+
+		_, err = uwf.Begin(5)
+		require.NoError(t, err)
+
+		err = uwf.SetTx(t.Context(), "key_0", "value_0")
+		require.ErrorContains(t, err, "key_0 ключ уже занят")
+		assert.NotNil(t, uwf.transactionBuffer)
+		assert.False(t, uwf.URL.mu.TryLock())
+
+		assert.Len(t, uwf.URL.data, 1)
+		assert.Len(t, uwf.transactionBuffer, 0)
 	})
 }
