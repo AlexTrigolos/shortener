@@ -10,8 +10,9 @@ import (
 )
 
 type URLWithFile struct {
-	URL             *URL
-	fileStoragePath string
+	URL               *URL
+	fileStoragePath   string
+	transactionBuffer map[string]string
 }
 
 func NewURLWithFile(fileStoragePath string) (*URLWithFile, error) {
@@ -25,10 +26,6 @@ func NewURLWithFile(fileStoragePath string) (*URLWithFile, error) {
 		return nil, errors.New("не удалось загрузить сохраненные urls сокращения")
 	}
 	return urlWithFile, nil
-}
-
-func (uwf *URLWithFile) PingContext(ctx context.Context) error {
-	return errors.New("нет доступа к бд")
 }
 
 func (uwf *URLWithFile) Set(ctx context.Context, key, value string) error {
@@ -137,5 +134,63 @@ func (uwf *URLWithFile) save(key, value string) error {
 		return err
 	}
 
+	return nil
+}
+
+func (uwf *URLWithFile) PingContext(ctx context.Context) error {
+	return errors.New("нет доступа к бд")
+}
+
+// имитируем транзакцию
+func (uwf *URLWithFile) Begin(count int) (*Transaction, error) {
+	uwf.URL.mu.Lock()
+	uwf.transactionBuffer = make(map[string]string, count)
+	transaction, err := NewTransaction(uwf)
+	if err != nil {
+		return nil, err
+	}
+	return transaction, nil
+}
+
+func (uwf *URLWithFile) Rollback() error {
+	defer uwf.URL.mu.Unlock()
+	uwf.transactionBuffer = nil
+	return nil
+}
+
+func (uwf *URLWithFile) Commit() error {
+	defer uwf.URL.mu.Unlock()
+	defer func() { uwf.transactionBuffer = nil}()
+
+	savedKeys := []string{}
+	for k, v := range uwf.transactionBuffer {
+		_, exists := uwf.URL.data[k]
+		if exists {
+			for _, delKey := range savedKeys {
+				delete(uwf.URL.data, delKey)
+			}
+			return errors.New(k + " ключ уже занят")
+		}
+
+		uwf.URL.data[k] = v
+
+		err := uwf.save(k, v)
+		if err != nil {
+			for _, delKey := range savedKeys {
+				delete(uwf.URL.data, delKey)
+			}
+			return errors.New("не удалось записать новой сокращенный url в файл")
+		}
+		savedKeys = append(savedKeys, k)
+	}
+	return nil
+}
+
+func (uwf *URLWithFile) SetTx(ctx context.Context, key, value string) error {
+	_, exists := uwf.URL.data[key]
+	if exists {
+		return errors.New(key + " ключ уже занят")
+	}
+	uwf.transactionBuffer[key] = value
 	return nil
 }

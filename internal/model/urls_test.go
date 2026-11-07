@@ -12,7 +12,7 @@ func TestNewURL(t *testing.T) {
 	t.Run("удачное получение", func(t *testing.T) {
 		newURL, err := NewURL()
 		require.NoError(t, err)
-		assert.Equal(t, &URL{mu: sync.Mutex{}, data: map[string]string{}}, newURL)
+		assert.Equal(t, &URL{mu: sync.Mutex{}, data: map[string]string{}, transactionBuffer: nil}, newURL)
 	})
 }
 
@@ -116,5 +116,99 @@ func TestURL_PingContext(t *testing.T) {
 		require.NoError(t, err)
 		gotErr := u.PingContext(t.Context())
 		require.ErrorContains(t, gotErr, "нет доступа к бд")
+	})
+}
+
+func TestURL_Begin(t *testing.T) {
+	t.Run("удачное создание транзакции", func(t *testing.T) {
+		urls, err := NewURL()
+		require.NoError(t, err)
+
+		tr, err := urls.Begin(5)
+		require.NoError(t, err)
+		assert.Equal(t, &Transaction{tx: urls, commited: false}, tr)
+		assert.NotNil(t, urls.transactionBuffer)
+		assert.False(t, urls.mu.TryLock())
+	})
+}
+
+func TestURL_Rollback(t *testing.T) {
+	t.Run("удачная отмена транзакции", func(t *testing.T) {
+		urls, err := NewURL()
+		require.NoError(t, err)
+
+		_, err = urls.Begin(5)
+		require.NoError(t, err)
+
+		err = urls.Rollback()
+		require.NoError(t, err)
+		assert.Nil(t, urls.transactionBuffer)
+		assert.True(t, urls.mu.TryLock())
+	})
+}
+
+func TestURL_Commit(t *testing.T) {
+	t.Run("удачное завершение транзакции", func(t *testing.T) {
+		urls, err := NewURL()
+		require.NoError(t, err)
+
+		_, err = urls.Begin(5)
+		require.NoError(t, err)
+
+		urls.transactionBuffer["short_1"] = "long_1"
+		urls.transactionBuffer["short_2"] = "long_2"
+
+		err = urls.Commit()
+		require.NoError(t, err)
+		assert.Nil(t, urls.transactionBuffer)
+		assert.True(t, urls.mu.TryLock())
+
+		assert.Len(t, urls.data, 2)
+		assert.Contains(t, urls.data, "short_1")
+		assert.Equal(t, urls.data["short_1"], "long_1")
+		assert.Contains(t, urls.data, "short_2")
+		assert.Equal(t, urls.data["short_2"], "long_2")
+	})
+}
+
+func TestURL_SetTx(t *testing.T) {
+	t.Run("удачное добавление внутри транзакции", func(t *testing.T) {
+		urls, err := NewURL()
+		require.NoError(t, err)
+
+		_, err = urls.Begin(5)
+		require.NoError(t, err)
+
+		err = urls.SetTx(t.Context(), "key_1", "value_1")
+		require.NoError(t, err)
+		err = urls.SetTx(t.Context(), "key_2", "value_2")
+		require.NoError(t, err)
+		assert.NotNil(t, urls.transactionBuffer)
+		assert.False(t, urls.mu.TryLock())
+
+		assert.Len(t, urls.data, 0)
+
+		assert.Len(t, urls.transactionBuffer, 2)
+		assert.Contains(t, urls.transactionBuffer, "key_1")
+		assert.Equal(t, urls.transactionBuffer["key_1"], "value_1")
+		assert.Contains(t, urls.transactionBuffer, "key_2")
+		assert.Equal(t, urls.transactionBuffer["key_2"], "value_2")
+	})
+	t.Run("неудачное добавление внутри транзакции", func(t *testing.T) {
+		urls, err := NewURL()
+		require.NoError(t, err)
+		err = urls.Set(t.Context(), "key_1", "value_1")
+		require.NoError(t, err)
+
+		_, err = urls.Begin(5)
+		require.NoError(t, err)
+
+		err = urls.SetTx(t.Context(), "key_1", "value_1")
+		require.ErrorContains(t, err, "key_1 ключ уже занят")
+		assert.NotNil(t, urls.transactionBuffer)
+		assert.False(t, urls.mu.TryLock())
+
+		assert.Len(t, urls.data, 1)
+		assert.Len(t, urls.transactionBuffer, 0)
 	})
 }

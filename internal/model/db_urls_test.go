@@ -118,7 +118,7 @@ func TestDBURL_Get(t *testing.T) {
 					WithArgs(key).
 					WillReturnError(tt.willFailReturn)
 			}
-			
+
 			value, err := dbu.Get(ctx, key)
 			if tt.wantErr == "" {
 				require.NoError(t, err)
@@ -130,4 +130,108 @@ func TestDBURL_Get(t *testing.T) {
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+func TestDBURL_Begin(t *testing.T) {
+	t.Run("удачное создание транзакции", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		dbu, err := NewDBURL(db)
+		require.NoError(t, err)
+
+		mock.ExpectBegin()
+		tr, err := dbu.Begin(0)
+		require.NoError(t, err)
+		assert.Equal(t, &Transaction{tx: dbu, commited: false}, tr)
+		assert.NotNil(t, dbu.transaction)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestDBURL_Rollback(t *testing.T) {
+	t.Run("удачная отмена транзакции", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		dbu, err := NewDBURL(db)
+		require.NoError(t, err)
+		mock.ExpectBegin()
+		_, err = dbu.Begin(0)
+		require.NoError(t, err)
+
+		mock.ExpectRollback()
+		err = dbu.Rollback()
+		require.NoError(t, err)
+		assert.Nil(t, dbu.transaction)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestDBURL_Commit(t *testing.T) {
+	t.Run("удачное завершение транзакции", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		dbu, err := NewDBURL(db)
+		require.NoError(t, err)
+		mock.ExpectBegin()
+		_, err = dbu.Begin(0)
+		require.NoError(t, err)
+
+		mock.ExpectCommit()
+		err = dbu.Commit()
+		require.NoError(t, err)
+		assert.Nil(t, dbu.transaction)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestDBURL_SetTx(t *testing.T) {
+	t.Run("удачное добавление внутри транзакции", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		dbu, err := NewDBURL(db)
+		require.NoError(t, err)
+		mock.ExpectBegin()
+		_, err = dbu.Begin(0)
+		require.NoError(t, err)
+
+		mock.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
+			WithArgs("key_1", "value_1").
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
+			WithArgs("key_2", "value_2").
+			WillReturnResult(sqlmock.NewResult(2, 1))
+		err = dbu.SetTx(t.Context(), "key_1", "value_1")
+		require.NoError(t, err)
+		err = dbu.SetTx(t.Context(), "key_2", "value_2")
+		require.NoError(t, err)
+		assert.NotNil(t, dbu.transaction)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+	t.Run("неудачное добавление внутри транзакции", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		dbu, err := NewDBURL(db)
+		require.NoError(t, err)
+		mock.ExpectBegin()
+		_, err = dbu.Begin(0)
+		require.NoError(t, err)
+
+		mock.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
+			WithArgs("key_1", "value_1").
+			WillReturnError(errors.New("не смогли добавить"))
+		err = dbu.SetTx(t.Context(), "key_1", "value_1")
+		require.ErrorContains(t, err, "не смогли добавить")
+		assert.NotNil(t, dbu.transaction)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 }
