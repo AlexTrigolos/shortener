@@ -52,28 +52,29 @@ func (a App) RunApp() error {
 
 	flags := server.Flags
 
-	var URLs router.GetterSetterDBReady
+	var URLs router.GetterSetterWithConflictDBReady
+	var URLErr error
 	if flags.DataBase != "" {
 		// хз норм или нет, мб на старт бд и миграции не особо и нужен контекст
 		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
 		defer cancel()
 
-		db, e := setupDB(ctx, flags.DataBase)
-		if e != nil {
+		db, err := setupDB(ctx, flags.DataBase)
+		if err != nil {
 			return logAndReturnError(logger, err)
 		}
 		defer db.Close()
 
-		URLs, err = model.NewDBURL(db)
+		URLs, URLErr = model.NewDBURL(db)
 	} else {
 		if flags.FileStoragePath != "" {
-			URLs, err = model.NewURLWithFile(flags.FileStoragePath)
+			URLs, URLErr = model.NewURLWithFile(flags.FileStoragePath)
 		} else {
-			URLs, err = model.NewURL()
+			URLs, URLErr = model.NewURL()
 		}
 	}
-	if err != nil {
-		return logAndReturnError(logger, err)
+	if URLErr != nil {
+		return logAndReturnError(logger, URLErr)
 	}
 	r := router.NewGenerateRouter(URLs)
 

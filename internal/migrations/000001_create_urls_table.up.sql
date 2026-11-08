@@ -5,4 +5,4 @@ CREATE TABLE IF NOT EXISTS urls (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_urls_short ON urls(short);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_urls_short ON urls(short);

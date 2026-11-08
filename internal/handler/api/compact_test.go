@@ -36,6 +36,12 @@ func (mg MockFailGenerator) GenerateAndSetUniqURL(context.Context, string) (stri
 	return "", errors.New("исчерпано количество попыток создать короткую ссылку")
 }
 
+type MockConflictGenerator struct{}
+
+func (mg MockConflictGenerator) GenerateAndSetUniqURL(context.Context, string) (string, error) {
+	return shortURL, model.ErrConfilct
+}
+
 func TestNewCompact(t *testing.T) {
 	logger := &zap.Logger{}
 
@@ -53,9 +59,6 @@ func TestNewCompact(t *testing.T) {
 }
 
 func TestCompactHandler(t *testing.T) {
-	urls, err := model.NewURL()
-	require.NoError(t, err)
-
 	handler := chi.NewRouter()
 
 	type want struct {
@@ -75,6 +78,16 @@ func TestCompactHandler(t *testing.T) {
 			generatorStruct: MockGenerator{},
 			want: want{
 				statusCode:  201,
+				contentType: "application/json",
+				response:    "{\"result\":\"" + baseURL + "/" + shortURL + "\"}\n",
+			},
+		},
+		{
+			name:            "конфликт при сокращении",
+			body:            "{\"url\":\"http://long.url\"}",
+			generatorStruct: MockConflictGenerator{},
+			want: want{
+				statusCode:  409,
 				contentType: "application/json",
 				response:    "{\"result\":\"" + baseURL + "/" + shortURL + "\"}\n",
 			},
@@ -126,8 +139,6 @@ func TestCompactHandler(t *testing.T) {
 			handler.Post("/api/shorten", apiCompact.CompactHandler(baseURL))
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
-
-			urls.Set(t.Context(), "short.url", srv.URL)
 
 			req := resty.New().R()
 			req.Method = http.MethodPost

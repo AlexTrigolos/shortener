@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AlexTrigolos/shortener/internal/model"
 	"go.uber.org/zap"
 )
 
@@ -48,14 +49,20 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 		defer cancel()
 
 		short, err := c.generator.GenerateAndSetUniqURL(ctx, originalURL)
-		if err != nil {
+		if err != nil && !errors.Is(err, model.ErrConfilct) {
 			c.logger.Error("создание короткой ссылки", zap.String("Error", err.Error()))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusCreated)
+
+		if errors.Is(err, model.ErrConfilct) {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
+
 		w.Write([]byte(baseURL + "/" + short))
 	}
 }

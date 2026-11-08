@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,6 +42,18 @@ func TestDBURL_Set(t *testing.T) {
 			willSuccessReturn: nil,
 			willFailReturn:    errors.New("some db error"),
 			wantErr:           "some db error",
+		},
+		{
+			name:              "ошибка добавления pgconn.PgError",
+			willSuccessReturn: nil,
+			willFailReturn:    &pgconn.PgError{Code: pgerrcode.AdminShutdown, Message: "отключка"},
+			wantErr:           ": отключка (SQLSTATE 57P01)",
+		},
+		{
+			name:              "ошибка добавления конфликт",
+			willSuccessReturn: nil,
+			willFailReturn:    &pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "уникальности ошибку ты получил"},
+			wantErr:           "conflict",
 		},
 	}
 	for _, tt := range tests {
@@ -91,12 +105,6 @@ func TestDBURL_Get(t *testing.T) {
 			willFailReturn:    errors.New("some db error"),
 			wantErr:           "some db error",
 		},
-		{
-			name:              "получили null",
-			willSuccessReturn: sqlmock.NewRows([]string{"original"}).AddRow(nil),
-			willFailReturn:    nil,
-			wantErr:           "такой ключ не найден",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -126,6 +134,60 @@ func TestDBURL_Get(t *testing.T) {
 			} else {
 				require.ErrorContains(t, err, tt.wantErr)
 				assert.Equal(t, "", value)
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestDBURL_GetByOriginal(t *testing.T) {
+	tests := []struct {
+		name              string
+		willSuccessReturn *sqlmock.Rows
+		willFailReturn    error
+		wantErr           string
+	}{
+		{
+			name:              "удачное получение",
+			willSuccessReturn: sqlmock.NewRows([]string{"short"}).AddRow("shory_url"),
+			willFailReturn:    nil,
+			wantErr:           "",
+		},
+		{
+			name:              "не удалось получить",
+			willSuccessReturn: nil,
+			willFailReturn:    errors.New("some db error"),
+			wantErr:           "some db error",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+
+			dbu := &DBURL{db: db}
+
+			ctx := t.Context()
+			value := "original_value"
+
+			if tt.willFailReturn == nil {
+				mock.ExpectQuery("SELECT short FROM urls WHERE original = \\$1").
+					WithArgs(value).
+					WillReturnRows(tt.willSuccessReturn)
+			} else {
+				mock.ExpectQuery("SELECT short FROM urls WHERE original = \\$1").
+					WithArgs(value).
+					WillReturnError(tt.willFailReturn)
+			}
+
+			key, err := dbu.GetByOriginal(ctx, value)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				assert.Equal(t, "shory_url", key)
+			} else {
+				require.ErrorContains(t, err, tt.wantErr)
+				assert.Equal(t, "", key)
 			}
 			require.NoError(t, mock.ExpectationsWereMet())
 		})

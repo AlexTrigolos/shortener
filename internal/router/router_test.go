@@ -15,13 +15,16 @@ import (
 
 type MockedDBURL struct{}
 
-func (mdb MockedDBURL) PingContext(ctx context.Context) error {
+func (mdb MockedDBURL) Set(ctx context.Context, key, value string) error {
 	return nil
 }
 func (mdb MockedDBURL) Get(ctx context.Context, key string) (string, error) {
 	return "", nil
 }
-func (mdb MockedDBURL) Set(ctx context.Context, key, value string) error {
+func (mdb MockedDBURL) GetByOriginal(ctx context.Context, original string) (string, error) {
+	return "", nil
+}
+func (mdb MockedDBURL) PingContext(ctx context.Context) error {
 	return nil
 }
 func (mdb MockedDBURL) Begin(int) (*model.Transaction, error) {

@@ -57,9 +57,6 @@ func TestNewBatchCompact(t *testing.T) {
 }
 
 func TestBatchCompactHandler(t *testing.T) {
-	urls, err := model.NewURL()
-	require.NoError(t, err)
-
 	handler := chi.NewRouter()
 
 	type want struct {
@@ -140,8 +137,6 @@ func TestBatchCompactHandler(t *testing.T) {
 			handler.Post("/api/shorten/batch", apiCompact.BatchCompactHandler(batchBaseURL))
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
-
-			urls.Set(t.Context(), "short.url", srv.URL)
 
 			req := resty.New().R()
 			req.Method = http.MethodPost

@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type DBURL struct {
@@ -17,25 +20,40 @@ func NewDBURL(db *sql.DB) (*DBURL, error) {
 
 func (dbu *DBURL) Set(ctx context.Context, key, value string) error {
 	_, err := dbu.db.ExecContext(ctx, "INSERT INTO urls (short, original) VALUES ($1, $2)", key, value)
-	if err != nil {
+	if err == nil {
+		return nil
+	}
+
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
 		return err
 	}
-	return nil
+	if pgErr.Code != pgerrcode.UniqueViolation {
+		return err
+	}
+	return ErrConfilct
 }
 
 func (dbu *DBURL) Get(ctx context.Context, key string) (string, error) {
 	row := dbu.db.QueryRowContext(ctx, "SELECT original FROM urls WHERE short = $1", key)
-	var original sql.NullString
+	var original string
 
 	err := row.Scan(&original)
 	if err != nil {
 		return "", err
 	}
-	if original.Valid {
-		return original.String, nil
-	}
+	return original, nil
+}
 
-	return "", errors.New("такой ключ не найден")
+func (dbu *DBURL) GetByOriginal(ctx context.Context, original string) (string, error) {
+	row := dbu.db.QueryRowContext(ctx, "SELECT short FROM urls WHERE original = $1", original)
+	var short string
+
+	err := row.Scan(&short)
+	if err != nil {
+		return "", err
+	}
+	return short, nil
 }
 
 func (dbu *DBURL) PingContext(ctx context.Context) error {

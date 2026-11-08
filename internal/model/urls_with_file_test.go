@@ -49,8 +49,8 @@ func TestNewURLWithFile(t *testing.T) {
 			filename:     filename,
 			wantFileData: fileData,
 			want: &URLWithFile{
-				URL:             urls,
-				fileStoragePath: filename,
+				URL:               urls,
+				fileStoragePath:   filename,
 				transactionBuffer: nil,
 			},
 		},
@@ -59,8 +59,8 @@ func TestNewURLWithFile(t *testing.T) {
 			filename:     newFilename,
 			wantFileData: emptyData,
 			want: &URLWithFile{
-				URL:             urls,
-				fileStoragePath: newFilename,
+				URL:               urls,
+				fileStoragePath:   newFilename,
 				transactionBuffer: nil,
 			},
 		},
@@ -94,8 +94,14 @@ func TestURLWithFile_Set(t *testing.T) {
 		{
 			name:    "установка по имеющемуся ключу",
 			key:     "key1",
-			value:   "value1",
+			value:   "value2",
 			wantErr: "такой ключ уже занят",
+		},
+		{
+			name:    "конфликт значений",
+			key:     "key1",
+			value:   "value1",
+			wantErr: "conflict",
 		},
 		{
 			name:    "добавление нового ключа в пустой",
@@ -117,14 +123,15 @@ func TestURLWithFile_Set(t *testing.T) {
 			require.NoError(t, err)
 
 			urlsCount := 1
-			urlsWithFile := &URLWithFile{URL: &URL{data: map[string]string{}}, fileStoragePath: filename}
+			urlsWithFile := &URLWithFile{URL: &URL{data: map[string]string{}, values: map[string]string{}}, fileStoragePath: filename}
 			if tt.name != "добавление нового ключа в пустой" {
-				urlsWithFile.URL.data["key1"] = "value1"
+				urlsWithFile.URL.Set(t.Context(), "key1", "value1")
 
 				newData, err := addingSlice{key: "key1", value: "value1", count: urlsCount}.marshalJSON()
 				require.NoError(t, err)
 				urlsCount++
 				wantFileData = append(wantFileData[:len(wantFileData)-1], newData...)
+				wantFileData = append(wantFileData, []byte("\n]")...)
 			}
 
 			_, err = file.Write(wantFileData)
@@ -138,6 +145,7 @@ func TestURLWithFile_Set(t *testing.T) {
 					lenWantFileData -= 1
 				}
 				wantFileData = append(wantFileData[:lenWantFileData], newData...)
+				wantFileData = append(wantFileData, []byte("\n]")...)
 			}
 
 			err = urlsWithFile.Set(t.Context(), tt.key, tt.value)
@@ -147,6 +155,8 @@ func TestURLWithFile_Set(t *testing.T) {
 				require.NoError(t, err)
 				assert.Contains(t, urlsWithFile.URL.data, tt.key)
 				assert.Equal(t, urlsWithFile.URL.data[tt.key], tt.value)
+				assert.Contains(t, urlsWithFile.URL.values, tt.value)
+				assert.Equal(t, urlsWithFile.URL.values[tt.value], tt.key)
 			}
 
 			data, err := os.ReadFile(filename)
@@ -166,17 +176,17 @@ func TestURLWithFile_Get(t *testing.T) {
 	}{
 		{
 			name:    "получает значение по ключу",
-			urls:    &URLWithFile{URL: &URL{data: map[string]string{"key1": "value1"}}},
+			urls:    &URLWithFile{URL: &URL{data: map[string]string{"key1": "value1"}, values: map[string]string{"value1": "key1"}}},
 			key:     "key1",
 			wantVal: "value1",
 			wantErr: "",
 		},
 		{
 			name:    "не находит значение по ключу",
-			urls:    &URLWithFile{URL: &URL{data: map[string]string{}}},
+			urls:    &URLWithFile{URL: &URL{data: map[string]string{}, values: map[string]string{}}},
 			key:     "key1",
 			wantVal: "",
-			wantErr: "такой ключ не найден",
+			wantErr: "не найден ключ key1",
 		},
 	}
 	for _, tt := range tests {
@@ -184,6 +194,45 @@ func TestURLWithFile_Get(t *testing.T) {
 			urls := tt.urls
 			value, err := urls.Get(t.Context(), tt.key)
 			assert.Equal(t, tt.wantVal, value)
+
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestURLWithFile_GetByOriginal(t *testing.T) {
+	tests := []struct {
+		name    string
+		urls    *URLWithFile
+		value   string
+		wantKey string
+		wantErr string
+	}{
+		{
+			name:    "получает ключ по значению",
+			urls:    &URLWithFile{URL: &URL{data: map[string]string{"key1": "value1"}, values: map[string]string{"value1": "key1"}}},
+			value:   "value1",
+			wantKey: "key1",
+			wantErr: "",
+		},
+		{
+			name:    "не находит ключ по значению",
+			urls:    &URLWithFile{URL: &URL{data: map[string]string{}, values: map[string]string{}}},
+			value:   "value1",
+			wantKey: "",
+			wantErr: "не нашли значение value1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			urls := tt.urls
+			key, err := urls.GetByOriginal(t.Context(), tt.value)
+			assert.Equal(t, tt.wantKey, key)
 
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
@@ -277,6 +326,8 @@ func TestURLWithFile_Commit(t *testing.T) {
 
 		uwf.transactionBuffer["short_1"] = "long_1"
 		uwf.transactionBuffer["short_2"] = "long_2"
+		want1 := "[\n\t{\"original_url\":\"long_1\",\"short_url\":\"short_1\",\"uuid\":\"1\"},\n\t{\"original_url\":\"long_2\",\"short_url\":\"short_2\",\"uuid\":\"2\"}\n]"
+		want2 := "[\n\t{\"original_url\":\"long_2\",\"short_url\":\"short_2\",\"uuid\":\"1\"},\n\t{\"original_url\":\"long_1\",\"short_url\":\"short_1\",\"uuid\":\"2\"}\n]"
 
 		err = uwf.Commit()
 		require.NoError(t, err)
@@ -288,6 +339,16 @@ func TestURLWithFile_Commit(t *testing.T) {
 		assert.Equal(t, uwf.URL.data["short_1"], "long_1")
 		assert.Contains(t, uwf.URL.data, "short_2")
 		assert.Equal(t, uwf.URL.data["short_2"], "long_2")
+
+		assert.Len(t, uwf.URL.values, 2)
+		assert.Contains(t, uwf.URL.values, "long_1")
+		assert.Equal(t, uwf.URL.values["long_1"], "short_1")
+		assert.Contains(t, uwf.URL.values, "long_2")
+		assert.Equal(t, uwf.URL.values["long_2"], "short_2")
+
+		data, err := os.ReadFile(file.Name())
+		require.NoError(t, err)
+		require.True(t, want1 == string(data) || want2 == string(data))
 	})
 }
 

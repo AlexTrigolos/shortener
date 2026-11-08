@@ -91,9 +91,11 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 	require.NoError(t, err)
 
 	mockBad.ExpectBegin()
-	mockBad.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES").
-		WithArgs("ABab1221", "original_1").
-		WillReturnError(errors.New("исчерпано количество попыток создать короткую ссылку"))
+	for i := 0; i < 10; i++ {
+		mockBad.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES").
+			WithArgs("ABab1221", "original_1").
+			WillReturnError(errors.New("есть такой short"))
+	}
 	mockBad.ExpectRollback()
 	
 	tests := []struct {
