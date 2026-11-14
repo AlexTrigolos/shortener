@@ -37,7 +37,7 @@ git fetch template && git checkout template/v2 .github
 
 Сначала необходимо выполнить в `cmd/shortener` команду `go build -o shortener.exe`. Будет сгенерирован исполняемый файл `cmd/shortener/shortener` который далее устанавливается в опцию `-binary-path`.
 
-Далее в командной строке можно выполнить `shortenertest_v2.exe -test.v -test.run=^TestIteration1$ -binary-path=cmd/shortener/shortener -source-path=./ -server-port=8080`. Где `TestIteration1` должен на конце иметь номер итерации, `-binary-path` имеет ссылку сформированную ранее, `-source-path` имеет `./` ведь находится сам в корне и будет запускать тесты на `./...`, `-server-port` должен иметь порт под которым по дефолту запускается сервер.
+Далее в командной строке можно выполнить `shortenertest_v2.exe -test.v -test.run=^TestIteration12$ -binary-path=cmd/shortener/shortener -source-path=./ -server-port=8080 -file-storage-path=./urls_storage.json -database-dsn="host=localhost port=5432 user=urls password=password dbname=urls sslmode=disable"`. Где `TestIteration1` должен на конце иметь номер итерации, `-binary-path` имеет ссылку сформированную ранее, `-source-path` имеет `./` ведь находится сам в корне и будет запускать тесты на `./...`, `-server-port` должен иметь порт под которым по дефолту запускается сервер, `-file-storage-path` ссылается на хранение файла для теста, `-database-dsn` строка для подключения к реальной бд.
 
 ## Структура проекта
 

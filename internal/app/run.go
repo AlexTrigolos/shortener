@@ -1,12 +1,19 @@
 package app
 
 import (
+	"database/sql"
 	"log/slog"
 	"os"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+
 	"github.com/AlexTrigolos/shortener/internal/config"
+	migrateDB "github.com/AlexTrigolos/shortener/internal/db"
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/AlexTrigolos/shortener/internal/router"
+	"github.com/golang-migrate/migrate/v4/database"
 	"go.uber.org/zap"
 )
 
@@ -48,18 +55,52 @@ func (a App) RunApp() error {
 
 	flags := server.Flags
 
-	newURLWithFile, err := model.NewURLWithFile(server.Flags.FileStoragePath)
+	var URLs router.GetterSetterWithConflictDBReady
+	var URLErr error
+	if flags.DataBase != "" {
+		db, err := sql.Open("pgx", flags.DataBase)
+		if err != nil {
+			return logAndReturnError(logger, err)
+		}
+		defer db.Close()
+
+		var dbDrv *database.Driver
+		var m *migrate.Migrate
+
+		URLs, dbDrv, m, URLErr = model.NewDBURL(db, &migrateDB.MigrationService{})
+
+		defer func() {
+			if dbDrv != nil {
+				(*dbDrv).Close()
+			}
+			if m != nil {
+				m.Close()
+			}
+		}()
+	} else {
+		if flags.FileStoragePath != "" {
+			URLs, URLErr = model.NewURLWithFile(flags.FileStoragePath)
+		} else {
+			URLs, URLErr = model.NewURL()
+		}
+	}
+	if URLErr != nil {
+		return logAndReturnError(logger, URLErr)
+	}
+	defer func() {
+		err := URLs.Close()
+		if err != nil {
+			logAndReturnError(logger, err)
+		}
+	}()
+	r := router.NewGenerateRouter(URLs)
+
+	rtr, err := r.GenerateRoute(flags.BaseURL, server)
 	if err != nil {
 		return logAndReturnError(logger, err)
 	}
-	r := router.NewGenerateRouter(newURLWithFile)
 
-	rtr, err := r.GenerateRoute(flags.GetBaseURL(), server)
-	if err != nil {
-		return logAndReturnError(logger, err)
-	}
-
-	err = server.ListenAndServe(flags.GetServerAddr(), rtr)
+	err = server.ListenAndServe(flags.Addr, rtr)
 	if err != nil {
 		return logAndReturnError(logger, err)
 	}

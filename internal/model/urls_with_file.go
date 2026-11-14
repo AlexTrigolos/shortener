@@ -1,6 +1,8 @@
 package model
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,8 +11,9 @@ import (
 )
 
 type URLWithFile struct {
-	URL             *URL
-	fileStoragePath string
+	URL               *URL
+	fileStoragePath   string
+	transactionBuffer map[string]string
 }
 
 func NewURLWithFile(fileStoragePath string) (*URLWithFile, error) {
@@ -19,15 +22,15 @@ func NewURLWithFile(fileStoragePath string) (*URLWithFile, error) {
 		return nil, errors.New("не удалось создать urls хранилище")
 	}
 	urlWithFile := &URLWithFile{URL: url, fileStoragePath: fileStoragePath}
-	err = urlWithFile.load()
+	err = urlWithFile.load(context.Background()) // контекст не важен, ведь доступа к бд нету
 	if err != nil {
 		return nil, errors.New("не удалось загрузить сохраненные urls сокращения")
 	}
 	return urlWithFile, nil
 }
 
-func (uwf *URLWithFile) Set(key, value string) error {
-	err := uwf.URL.Set(key, value)
+func (uwf *URLWithFile) Set(ctx context.Context, key, value string) error {
+	err := uwf.URL.Set(ctx, key, value)
 	if err != nil {
 		return err
 	}
@@ -42,11 +45,15 @@ func (uwf *URLWithFile) Set(key, value string) error {
 	return nil
 }
 
-func (uwf *URLWithFile) Get(key string) (string, error) {
-	return uwf.URL.Get(key)
+func (uwf *URLWithFile) Get(ctx context.Context, key string) (string, error) {
+	return uwf.URL.Get(ctx, key)
 }
 
-func (uwf *URLWithFile) load() error {
+func (uwf *URLWithFile) GetByOriginal(ctx context.Context, original string) (string, error) {
+	return uwf.URL.GetByOriginal(ctx, original)
+}
+
+func (uwf *URLWithFile) load(ctx context.Context) error {
 	data, err := os.ReadFile(uwf.fileStoragePath)
 	if errors.Is(err, os.ErrNotExist) {
 		return uwf.createEmpty()
@@ -59,7 +66,7 @@ func (uwf *URLWithFile) load() error {
 		return err
 	}
 	for _, el := range *jsonData {
-		err = uwf.URL.Set(el["short_url"], el["original_url"])
+		err = uwf.URL.Set(ctx, el["short_url"], el["original_url"])
 		if err != nil {
 			return err
 		}
@@ -101,8 +108,7 @@ func (s addingSlice) marshalJSON() ([]byte, error) {
 		start = append([]byte(","), start...)
 	}
 	withMarshal := append(start, data...)
-	withEndFile := append(withMarshal, []byte("\n]")...)
-	return withEndFile, nil
+	return withMarshal, nil
 }
 
 func (uwf *URLWithFile) save(key, value string) error {
@@ -127,10 +133,126 @@ func (uwf *URLWithFile) save(key, value string) error {
 		return err
 	}
 
-	_, err = file.Write(data)
+	_, err = file.Write(append(data, []byte("\n]")...))
 	if err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func (uwf *URLWithFile) PingContext(ctx context.Context) error {
+	return errors.New("нет доступа к бд")
+}
+
+// имитируем транзакцию
+func (uwf *URLWithFile) Begin(count int) (*Transaction, error) {
+	uwf.URL.mu.Lock()
+	uwf.transactionBuffer = make(map[string]string, count)
+	transaction, err := NewTransaction(uwf, nil, uwf)
+	if err != nil {
+		return nil, err
+	}
+	return transaction, nil
+}
+
+func (uwf *URLWithFile) Rollback() error {
+	defer uwf.URL.mu.Unlock()
+	uwf.transactionBuffer = nil
+	return nil
+}
+
+func (uwf *URLWithFile) Commit() error {
+	defer uwf.URL.mu.Unlock()
+	defer func() { uwf.transactionBuffer = nil }()
+
+	savedKeys := make([]string, 0, len(uwf.transactionBuffer))
+	buffedFileBytes := make([][]byte, 0, len(uwf.transactionBuffer))
+	for k, v := range uwf.transactionBuffer {
+		_, exists := uwf.URL.data[k]
+		if exists {
+			return uwf.rollbackURLCommit(savedKeys, k+" ключ уже занят")
+		}
+		_, exists = uwf.URL.values[v]
+		if exists {
+			return uwf.rollbackURLCommit(savedKeys, v+" значение уже занято")
+		}
+
+		uwf.URL.values[v] = k
+		uwf.URL.data[k] = v
+		savedKeys = append(savedKeys, k)
+
+		buff, err := uwf.buffCommit(k, v)
+		if err != nil {
+			return uwf.rollbackURLCommit(savedKeys, "проблема с генерацией строки для сохранения: "+err.Error())
+		}
+		buffedFileBytes = append(buffedFileBytes, buff)
+	}
+	if len(uwf.transactionBuffer) > 0 {
+		err := uwf.saveCommit(buffedFileBytes)
+		if err != nil {
+			return uwf.rollbackURLCommit(savedKeys, "проблема с сохранением файла транзакции: "+err.Error())
+		}
+	}
+	return nil
+}
+
+func (uwf *URLWithFile) rollbackURLCommit(savedKeys []string, errStr string) error {
+	for _, delKey := range savedKeys {
+		delete(uwf.URL.values, uwf.URL.data[delKey])
+		delete(uwf.URL.data, delKey)
+	}
+	return errors.New(errStr)
+}
+
+func (uwf *URLWithFile) buffCommit(key, value string) ([]byte, error) {
+	urlsCount := len(uwf.URL.data)
+	data, err := addingSlice{key: key, value: value, count: urlsCount}.marshalJSON()
+	if err != nil {
+		return []byte{}, err
+	}
+	return data, nil
+}
+
+func (uwf *URLWithFile) saveCommit(saveBytes [][]byte) error {
+	file, err := os.OpenFile(uwf.fileStoragePath, os.O_WRONLY, 0666)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	data := bytes.Join(saveBytes, []byte(""))
+
+	seekNum := int64(-1)
+	if len(uwf.URL.data) != len(saveBytes) {
+		seekNum -= 1
+	}
+	_, err = file.Seek(seekNum, io.SeekEnd)
+	if err != nil {
+		return err
+	}
+
+	_, err = file.Write(append(data, []byte("\n]")...))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (uwf *URLWithFile) SetTx(ctx context.Context, key, value string) error {
+	_, exists := uwf.URL.data[key]
+	if exists {
+		return errors.New(key + " ключ уже занят")
+	}
+	_, exists = uwf.transactionBuffer[key]
+	if exists {
+		return errors.New(key + " ключ уже занят в транзакции")
+	}
+	uwf.transactionBuffer[key] = value
+	return nil
+}
+
+func (uwf *URLWithFile) Close() error {
 	return nil
 }

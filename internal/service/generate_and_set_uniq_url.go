@@ -1,28 +1,38 @@
 package service
 
 import (
+	"context"
 	"errors"
+
+	"github.com/AlexTrigolos/shortener/internal/model"
 )
 
-type Setter interface {
-	Set(key, value string) error
+type SetterWithConflict interface {
+	Set(ctx context.Context, key, value string) error
+	GetByOriginal(ctx context.Context, original string) (string, error)
 }
 
 type GenerateURL struct {
-    randStr func(n int, letters ...string) string
-    storage Setter
+	randStr func(n int, letters ...string) string
+	storage SetterWithConflict
 }
 
-func NewGenerateURL(rs func(n int, letters ...string) string, storage Setter) *GenerateURL {
+func NewGenerateURL(rs func(n int, letters ...string) string, storage SetterWithConflict) *GenerateURL {
 	return &GenerateURL{randStr: rs, storage: storage}
 }
 
-func (gu GenerateURL) GenerateAndSetUniqURL(originalURL string) (string, error) {
+func (gu GenerateURL) GenerateAndSetUniqURL(ctx context.Context, originalURL string) (string, error) {
 	for range 10 {
 		uniqURL := gu.randStr(8)
-		err := gu.storage.Set(uniqURL, originalURL)
+		err := gu.storage.Set(ctx, uniqURL, originalURL)
 		if err == nil {
 			return uniqURL, nil
+		} else if errors.Is(err, model.ErrConflict) {
+			uniqURL, getErr := gu.storage.GetByOriginal(ctx, originalURL)
+			if getErr != nil {
+				return "", getErr
+			}
+			return uniqURL, err
 		}
 	}
 

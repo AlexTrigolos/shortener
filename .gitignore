@@ -23,4 +23,4 @@ vendor/
 .vscode
 
 # local storage
-cmd/shortener/urls_storage.json
+**/urls_storage.json
