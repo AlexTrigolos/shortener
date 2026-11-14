@@ -12,12 +12,12 @@ func TestNewURL(t *testing.T) {
 	t.Run("удачное получение", func(t *testing.T) {
 		newURL, err := NewURL()
 		require.NoError(t, err)
-		assert.Equal(t, &URL{mu: sync.Mutex{}, data: map[string]string{}, transactionBuffer: nil}, newURL)
+		assert.Equal(t, &URL{mu: sync.Mutex{}, data: map[string]string{}, values: map[string]string{}, transactionBuffer: nil}, newURL)
 	})
 }
 
 func TestURL_Set(t *testing.T) {
-	urls := &URL{data: map[string]string{"key1": "value1"}}
+	urls := &URL{data: map[string]string{"key1": "value1"}, values: map[string]string{"value1": "key1"}}
 	tests := []struct {
 		name    string
 		key     string
@@ -33,8 +33,14 @@ func TestURL_Set(t *testing.T) {
 		{
 			name:    "установка по имеющемуся ключу",
 			key:     "key1",
-			value:   "value1",
+			value:   "value2",
 			wantErr: "такой ключ уже занят",
+		},
+		{
+			name:    "конфликт значений",
+			key:     "key1",
+			value:   "value1",
+			wantErr: "conflict",
 		},
 	}
 	for _, tt := range tests {
@@ -46,13 +52,15 @@ func TestURL_Set(t *testing.T) {
 				require.NoError(t, err)
 				assert.Contains(t, urls.data, tt.key)
 				assert.Equal(t, urls.data[tt.key], tt.value)
+				assert.Contains(t, urls.values, tt.value)
+				assert.Equal(t, urls.values[tt.value], tt.key)
 			}
 		})
 	}
 }
 
 func TestURL_Get(t *testing.T) {
-	urls := &URL{data: map[string]string{"key1": "value1"}}
+	urls := &URL{data: map[string]string{"key1": "value1"}, values: map[string]string{"value1": "key1"}}
 	tests := []struct {
 		name    string
 		key     string
@@ -69,7 +77,7 @@ func TestURL_Get(t *testing.T) {
 			name:    "не находит значение по ключу",
 			key:     "key0",
 			wantVal: "",
-			wantErr: "такой ключ не найден",
+			wantErr: "не найден ключ key0",
 		},
 	}
 	for _, tt := range tests {
@@ -86,8 +94,43 @@ func TestURL_Get(t *testing.T) {
 	}
 }
 
+func TestURL_GetByOriginal(t *testing.T) {
+	urls := &URL{data: map[string]string{"key1": "value1"}, values: map[string]string{"value1": "key1"}}
+	tests := []struct {
+		name    string
+		value   string
+		wantKey string
+		wantErr string
+	}{
+		{
+			name:    "получает ключа по значению",
+			value:   "value1",
+			wantKey: "key1",
+			wantErr: "",
+		},
+		{
+			name:    "не находит ключ по значению",
+			value:   "value0",
+			wantKey: "",
+			wantErr: "не нашли значение value0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key, err := urls.GetByOriginal(t.Context(), tt.value)
+			assert.Equal(t, tt.wantKey, key)
+
+			if tt.wantErr != "" {
+				assert.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func Test_delete(t *testing.T) {
-	urls := &URL{data: map[string]string{"key1": "value1"}}
+	urls := &URL{data: map[string]string{"key1": "value1"}, values: map[string]string{"value1": "key1"}}
 	tests := []struct {
 		name string
 		key  string
@@ -103,9 +146,11 @@ func Test_delete(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			value := urls.data[tt.key]
 			err := urls.delete(tt.key)
 			require.NoError(t, err)
 			assert.NotContains(t, urls.data, tt.key)
+			assert.NotContains(t, urls.values, value)
 		})
 	}
 }
@@ -126,7 +171,7 @@ func TestURL_Begin(t *testing.T) {
 
 		tr, err := urls.Begin(5)
 		require.NoError(t, err)
-		assert.Equal(t, &Transaction{tx: urls, commited: false}, tr)
+		assert.Equal(t, &Transaction{tx: urls, selfSetTx: urls, commited: false}, tr)
 		assert.NotNil(t, urls.transactionBuffer)
 		assert.False(t, urls.mu.TryLock())
 	})
@@ -168,6 +213,12 @@ func TestURL_Commit(t *testing.T) {
 		assert.Equal(t, urls.data["short_1"], "long_1")
 		assert.Contains(t, urls.data, "short_2")
 		assert.Equal(t, urls.data["short_2"], "long_2")
+
+		assert.Len(t, urls.values, 2)
+		assert.Contains(t, urls.values, "long_1")
+		assert.Equal(t, urls.values["long_1"], "short_1")
+		assert.Contains(t, urls.values, "long_2")
+		assert.Equal(t, urls.values["long_2"], "short_2")
 	})
 }
 
@@ -210,5 +261,22 @@ func TestURL_SetTx(t *testing.T) {
 
 		assert.Len(t, urls.data, 1)
 		assert.Len(t, urls.transactionBuffer, 0)
+	})
+	t.Run("неудачное добавление внутри транзакции из-за совпадения с временным хранилищем", func(t *testing.T) {
+		urls, err := NewURL()
+		require.NoError(t, err)
+
+		_, err = urls.Begin(5)
+		require.NoError(t, err)
+
+		err = urls.SetTx(t.Context(), "key_1", "value_1")
+		require.NoError(t, err)
+		err = urls.SetTx(t.Context(), "key_1", "value_1")
+		require.ErrorContains(t, err, "key_1 ключ уже занят")
+		assert.NotNil(t, urls.transactionBuffer)
+		assert.False(t, urls.mu.TryLock())
+
+		assert.Len(t, urls.data, 0)
+		assert.Len(t, urls.transactionBuffer, 1)
 	})
 }

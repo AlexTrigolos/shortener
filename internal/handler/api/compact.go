@@ -58,14 +58,19 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 		defer cancel()
 
 		short, err := c.generator.GenerateAndSetUniqURL(ctx, originalURL)
-		if err != nil {
+		if err != nil && !errors.Is(err, model.ErrConflict) {
 			c.logger.Error("создание короткой ссылки", zap.String("Error", err.Error()))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
+
+		if errors.Is(err, model.ErrConflict) {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
 
 		resp := model.Response{Result: baseURL + "/" + short}
 		enc := json.NewEncoder(w)

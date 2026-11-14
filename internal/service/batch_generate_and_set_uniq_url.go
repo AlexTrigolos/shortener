@@ -8,7 +8,6 @@ import (
 )
 
 type BatchSetter interface {
-	SetTx(ctx context.Context, key, value string) error
 	Begin(count int) (*model.Transaction, error)
 }
 
@@ -49,12 +48,11 @@ func (gu BatchGenerateURL) BatchGenerateAndSetUniqURL(ctx context.Context, origi
 			uniqURL := generatedStr[startStr:endStr]
 			startStr += shortLen
 			endStr += shortLen
-			err := gu.storage.SetTx(ctx, uniqURL, originalURLInfo.OriginalURL)
-			if err != nil {
-				continue
+			err := tx.SetTx(ctx, uniqURL, originalURLInfo.OriginalURL)
+			if err == nil {
+				result = append(result, model.BatchResponse{CorrelationID: originalURLInfo.CorrelationID, ShortURL: baseURL + "/" + uniqURL})
+				break
 			}
-			result = append(result, model.BatchResponse{CorrelationID: originalURLInfo.CorrelationID, ShortURL: baseURL + "/" + uniqURL})
-			break
 		}
 		if retryNum == maxRetries {
 			return &result, errors.New("исчерпано количество попыток создать короткую ссылку")

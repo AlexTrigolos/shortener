@@ -14,20 +14,21 @@ import (
 	"github.com/AlexTrigolos/shortener/internal/service"
 )
 
-type GetterSetterDBReady interface {
+type GetterSetterWithConflictDBReady interface {
 	Set(ctx context.Context, key, value string) error
 	Get(ctx context.Context, key string) (string, error)
+	GetByOriginal(ctx context.Context, original string) (string, error)
 
 	PingContext(ctx context.Context) error
 	Begin(count int) (*model.Transaction, error)
-	SetTx(ctx context.Context, key, value string) error
+	Close() error
 }
 
 type GenerateRouter struct {
-	URLs GetterSetterDBReady
+	URLs GetterSetterWithConflictDBReady
 }
 
-func NewGenerateRouter(nu GetterSetterDBReady) *GenerateRouter {
+func NewGenerateRouter(nu GetterSetterWithConflictDBReady) *GenerateRouter {
 	return &GenerateRouter{URLs: nu}
 }
 
