@@ -22,7 +22,7 @@ func (u *URL) Set(_ context.Context, key, value string) error {
 	defer u.mu.Unlock()
 	_, exists := u.values[value]
 	if exists {
-		return ErrConfilct
+		return ErrConflict
 	}
 	_, exists = u.data[key]
 	if exists {
@@ -44,6 +44,8 @@ func (u *URL) Get(_ context.Context, key string) (string, error) {
 }
 
 func (u *URL) GetByOriginal(_ context.Context, original string) (string, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
 	short, exists := u.values[original]
 	if !exists {
 		return "", errors.New("не нашли значение " + original)
@@ -67,7 +69,7 @@ func (u *URL) PingContext(ctx context.Context) error {
 func (u *URL) Begin(count int) (*Transaction, error) {
 	u.mu.Lock()
 	u.transactionBuffer = make(map[string]string, count)
-	transaction, err := NewTransaction(u)
+	transaction, err := NewTransaction(u, nil, u)
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +116,14 @@ func (u *URL) SetTx(_ context.Context, key, value string) error {
 	if exists {
 		return errors.New(key + " ключ уже занят")
 	}
+	_, exists = u.transactionBuffer[key]
+	if exists {
+		return errors.New(key + " ключ уже занят в транзакции")
+	}
 	u.transactionBuffer[key] = value
+	return nil
+}
+
+func (u *URL) Close() error {
 	return nil
 }

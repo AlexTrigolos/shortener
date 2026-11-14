@@ -33,6 +33,9 @@ func (mdb MockedDBURL) Begin(int) (*model.Transaction, error) {
 func (mdb MockedDBURL) SetTx(ctx context.Context, key string, value string) error {
 	return nil
 }
+func (mdb MockedDBURL) Close() error {
+	return nil
+}
 
 func TestNewGenerateRouter(t *testing.T) {
 	t.Run("создать новый GenerateRouter", func(t *testing.T) {

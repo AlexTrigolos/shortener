@@ -171,7 +171,7 @@ func TestURL_Begin(t *testing.T) {
 
 		tr, err := urls.Begin(5)
 		require.NoError(t, err)
-		assert.Equal(t, &Transaction{tx: urls, commited: false}, tr)
+		assert.Equal(t, &Transaction{tx: urls, selfSetTx: urls, commited: false}, tr)
 		assert.NotNil(t, urls.transactionBuffer)
 		assert.False(t, urls.mu.TryLock())
 	})
@@ -261,5 +261,22 @@ func TestURL_SetTx(t *testing.T) {
 
 		assert.Len(t, urls.data, 1)
 		assert.Len(t, urls.transactionBuffer, 0)
+	})
+	t.Run("неудачное добавление внутри транзакции из-за совпадения с временным хранилищем", func(t *testing.T) {
+		urls, err := NewURL()
+		require.NoError(t, err)
+
+		_, err = urls.Begin(5)
+		require.NoError(t, err)
+
+		err = urls.SetTx(t.Context(), "key_1", "value_1")
+		require.NoError(t, err)
+		err = urls.SetTx(t.Context(), "key_1", "value_1")
+		require.ErrorContains(t, err, "key_1 ключ уже занят")
+		assert.NotNil(t, urls.transactionBuffer)
+		assert.False(t, urls.mu.TryLock())
+
+		assert.Len(t, urls.data, 0)
+		assert.Len(t, urls.transactionBuffer, 1)
 	})
 }

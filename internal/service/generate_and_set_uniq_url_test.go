@@ -1,6 +1,7 @@
 package service
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"os"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
@@ -26,6 +29,12 @@ func mockRandStr(executedCount *int, f func(n int, letters ...string) string) fu
 		*executedCount++
 		return f(n, letters...)
 	}
+}
+
+type MockMigrationService struct{}
+
+func (*MockMigrationService) RunMigrations(db *sql.DB) (*database.Driver, *migrate.Migrate, error) {
+	return nil, nil, nil
 }
 
 func TestNewGenerateURL(t *testing.T) {
@@ -72,7 +81,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	dbu, err := model.NewDBURL(db)
+	dbu, _, _, err := model.NewDBURL(db, &MockMigrationService{})
 	require.NoError(t, err)
 
 	mock.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
@@ -83,7 +92,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	dbuBad, err := model.NewDBURL(dbBad)
+	dbuBad, _, _, err := model.NewDBURL(dbBad, &MockMigrationService{})
 	require.NoError(t, err)
 	for i := 0; i < 10; i++ {
 		mockBad.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES").
@@ -95,14 +104,14 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	dbuConflict, err := model.NewDBURL(dbConflict)
+	dbuConflict, _, _, err := model.NewDBURL(dbConflict, &MockMigrationService{})
 	require.NoError(t, err)
 
 	conflictRandStr := randstr.String(8)
 	ConflictRandFunc := func(n int, letters ...string) string { return conflictRandStr }
 	mockConflict.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
 		WithArgs(conflictRandStr, notUniqOriginal).
-		WillReturnError(&pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "duplicate key value violates unique constraint"})
+		WillReturnError(&pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "duplicate key value violates unique constraint", ConstraintName: "idx_urls_original"})
 	mockConflict.ExpectQuery("SELECT short FROM urls WHERE original = \\$1").
 		WithArgs(notUniqOriginal).
 		WillReturnRows(sqlmock.NewRows([]string{"short"}).AddRow(notUniqURL))

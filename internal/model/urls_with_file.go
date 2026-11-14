@@ -149,7 +149,7 @@ func (uwf *URLWithFile) PingContext(ctx context.Context) error {
 func (uwf *URLWithFile) Begin(count int) (*Transaction, error) {
 	uwf.URL.mu.Lock()
 	uwf.transactionBuffer = make(map[string]string, count)
-	transaction, err := NewTransaction(uwf)
+	transaction, err := NewTransaction(uwf, nil, uwf)
 	if err != nil {
 		return nil, err
 	}
@@ -245,6 +245,14 @@ func (uwf *URLWithFile) SetTx(ctx context.Context, key, value string) error {
 	if exists {
 		return errors.New(key + " ключ уже занят")
 	}
+	_, exists = uwf.transactionBuffer[key]
+	if exists {
+		return errors.New(key + " ключ уже занят в транзакции")
+	}
 	uwf.transactionBuffer[key] = value
+	return nil
+}
+
+func (uwf *URLWithFile) Close() error {
 	return nil
 }

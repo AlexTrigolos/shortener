@@ -1,6 +1,7 @@
 package service
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"os"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thanhpk/randstr"
@@ -22,6 +25,12 @@ func mockBatchRandStr(executedCount *int, f func(n int, letters ...string) strin
 		*executedCount++
 		return f(n, letters...)
 	}
+}
+
+type MockMigration struct{}
+
+func (*MockMigration) RunMigrations(db *sql.DB) (*database.Driver, *migrate.Migrate, error) {
+	return nil, nil, nil
 }
 
 func TestNewBatchGenerateURL(t *testing.T) {
@@ -71,7 +80,7 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	dbu, err := model.NewDBURL(db)
+	dbu, _, _, err := model.NewDBURL(db, &MockMigration{})
 	require.NoError(t, err)
 
 	mock.ExpectBegin()
@@ -87,7 +96,7 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	dbuBad, err := model.NewDBURL(dbBad)
+	dbuBad, _, _, err := model.NewDBURL(dbBad, &MockMigration{})
 	require.NoError(t, err)
 
 	mockBad.ExpectBegin()
@@ -97,7 +106,7 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 			WillReturnError(errors.New("есть такой short"))
 	}
 	mockBad.ExpectRollback()
-	
+
 	tests := []struct {
 		name     string
 		mockRand func(n int, letters ...string) string
@@ -146,18 +155,18 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 			var executedCount = 0
 
 			newBatchGenerateURL := NewBatchGenerateURL(mockBatchRandStr(&executedCount, tt.mockRand), tt.storage)
-			uniqURL, err := newBatchGenerateURL.BatchGenerateAndSetUniqURL(t.Context(), &originalURLs, baseURL)
+			batchResponse, err := newBatchGenerateURL.BatchGenerateAndSetUniqURL(t.Context(), &originalURLs, baseURL)
 
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
-				assert.Equal(t, &[]model.BatchResponse{}, uniqURL)
+				assert.Equal(t, &[]model.BatchResponse{}, batchResponse)
 				assert.Equal(t, 1, executedCount)
 				if _, ok := tt.storage.(*model.DBURL); ok {
 					require.NoError(t, mockBad.ExpectationsWereMet())
 				}
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, &[]model.BatchResponse{{CorrelationID: "1", ShortURL: baseURL + "/" + randStr[0:8]}, {CorrelationID: "2", ShortURL: baseURL + "/" + randStr[8:16]}}, uniqURL)
+				assert.Equal(t, &[]model.BatchResponse{{CorrelationID: "1", ShortURL: baseURL + "/" + randStr[0:8]}, {CorrelationID: "2", ShortURL: baseURL + "/" + randStr[8:16]}}, batchResponse)
 				assert.Equal(t, 1, executedCount)
 				if _, ok := tt.storage.(*model.DBURL); ok {
 					require.NoError(t, mock.ExpectationsWereMet())

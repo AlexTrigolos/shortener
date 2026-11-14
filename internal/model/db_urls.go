@@ -5,17 +5,22 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type DBURL struct {
-	db          *sql.DB
-	transaction *sql.Tx
+	db *sql.DB
+}
+type MigrationService interface {
+	RunMigrations(db *sql.DB) (*database.Driver, *migrate.Migrate, error)
 }
 
-func NewDBURL(db *sql.DB) (*DBURL, error) {
-	return &DBURL{db: db}, nil
+func NewDBURL(db *sql.DB, migration MigrationService) (*DBURL, *database.Driver, *migrate.Migrate, error) {
+	dbDrv, m, err := migration.RunMigrations(db)
+	return &DBURL{db: db}, dbDrv, m, err
 }
 
 func (dbu *DBURL) Set(ctx context.Context, key, value string) error {
@@ -31,7 +36,11 @@ func (dbu *DBURL) Set(ctx context.Context, key, value string) error {
 	if pgErr.Code != pgerrcode.UniqueViolation {
 		return err
 	}
-	return ErrConfilct
+
+	if pgErr.ConstraintName == "idx_urls_original" {
+		return ErrConflict
+	}
+	return err
 }
 
 func (dbu *DBURL) Get(ctx context.Context, key string) (string, error) {
@@ -65,36 +74,9 @@ func (dbu *DBURL) Begin(_ int) (*Transaction, error) {
 	if err != nil {
 		return nil, err
 	}
-	dbu.transaction = tx
-	transaction, err := NewTransaction(dbu)
-	if err != nil {
-		return nil, err
-	}
-	return transaction, nil
+	return NewTransaction(tx, tx, nil)
 }
 
-func (dbu *DBURL) Rollback() error {
-	defer func() { dbu.transaction = nil }()
-	err := dbu.transaction.Rollback()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (dbu *DBURL) Commit() error {
-	defer func() { dbu.transaction = nil }()
-	err := dbu.transaction.Commit()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (dbu *DBURL) SetTx(ctx context.Context, key, value string) error {
-	_, err := dbu.transaction.ExecContext(ctx, "INSERT INTO urls (short, original) VALUES ($1, $2)", key, value)
-	if err != nil {
-		return err
-	}
-	return nil
+func (dbu *DBURL) Close() error {
+	return dbu.db.Close()
 }

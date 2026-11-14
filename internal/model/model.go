@@ -2,7 +2,7 @@ package model
 
 import "errors"
 
-var ErrConfilct = errors.New("conflict")
+var ErrConflict = errors.New("conflict")
 
 type Request struct {
 	URL string `json:"url"`

@@ -27,7 +27,7 @@ func (gu GenerateURL) GenerateAndSetUniqURL(ctx context.Context, originalURL str
 		err := gu.storage.Set(ctx, uniqURL, originalURL)
 		if err == nil {
 			return uniqURL, nil
-		} else if errors.Is(err, model.ErrConfilct) {
+		} else if errors.Is(err, model.ErrConflict) {
 			uniqURL, getErr := gu.storage.GetByOriginal(ctx, originalURL)
 			if getErr != nil {
 				return "", getErr

@@ -39,7 +39,7 @@ func (mg MockFailGenerator) GenerateAndSetUniqURL(context.Context, string) (stri
 type MockConflictGenerator struct{}
 
 func (mg MockConflictGenerator) GenerateAndSetUniqURL(context.Context, string) (string, error) {
-	return shortURL, model.ErrConfilct
+	return shortURL, model.ErrConflict
 }
 
 func TestNewCompact(t *testing.T) {

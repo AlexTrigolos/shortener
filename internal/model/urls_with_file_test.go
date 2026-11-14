@@ -271,7 +271,7 @@ func TestURLWithFile_Begin(t *testing.T) {
 
 		tr, err := uwf.Begin(5)
 		require.NoError(t, err)
-		assert.Equal(t, &Transaction{tx: uwf, commited: false}, tr)
+		assert.Equal(t, &Transaction{tx: uwf, selfSetTx: uwf, commited: false}, tr)
 		assert.NotNil(t, uwf.transactionBuffer)
 		assert.False(t, uwf.URL.mu.TryLock())
 	})
@@ -401,5 +401,22 @@ func TestURLWithFile_SetTx(t *testing.T) {
 
 		assert.Len(t, uwf.URL.data, 1)
 		assert.Len(t, uwf.transactionBuffer, 0)
+	})
+	t.Run("неудачное добавление внутри транзакции из-за совпадения с временным хранилищем", func(t *testing.T) {
+		uwf, err := NewURLWithFile(file.Name())
+		require.NoError(t, err)
+
+		_, err = uwf.Begin(5)
+		require.NoError(t, err)
+
+		err = uwf.SetTx(t.Context(), "key_1", "value_1")
+		require.NoError(t, err)
+		err = uwf.SetTx(t.Context(), "key_1", "value_1")
+		require.ErrorContains(t, err, "key_1 ключ уже занят")
+		assert.NotNil(t, uwf.transactionBuffer)
+		assert.False(t, uwf.URL.mu.TryLock())
+
+		assert.Len(t, uwf.URL.data, 1)
+		assert.Len(t, uwf.transactionBuffer, 1)
 	})
 }

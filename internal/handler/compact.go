@@ -49,7 +49,7 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 		defer cancel()
 
 		short, err := c.generator.GenerateAndSetUniqURL(ctx, originalURL)
-		if err != nil && !errors.Is(err, model.ErrConfilct) {
+		if err != nil && !errors.Is(err, model.ErrConflict) {
 			c.logger.Error("создание короткой ссылки", zap.String("Error", err.Error()))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
@@ -57,7 +57,7 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "text/plain")
 
-		if errors.Is(err, model.ErrConfilct) {
+		if errors.Is(err, model.ErrConflict) {
 			w.WriteHeader(http.StatusConflict)
 		} else {
 			w.WriteHeader(http.StatusCreated)
