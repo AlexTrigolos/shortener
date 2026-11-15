@@ -21,7 +21,6 @@ type GetterSetterWithConflictDBReady interface {
 
 	PingContext(ctx context.Context) error
 	Begin(count int) (*model.Transaction, error)
-	Close() error
 }
 
 type GenerateRouter struct {

@@ -247,8 +247,8 @@ func TestURLWithFile_GetByOriginal(t *testing.T) {
 func TestURLWithFile_PingContext(t *testing.T) {
 	t.Run("нет доступа к бд", func(t *testing.T) {
 		uwf := &URLWithFile{}
-		gotErr := uwf.PingContext(t.Context())
-		require.ErrorContains(t, gotErr, "нет доступа к бд")
+		err := uwf.PingContext(t.Context())
+		require.NoError(t, err)
 	})
 }
 

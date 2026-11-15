@@ -76,7 +76,3 @@ func (dbu *DBURL) Begin(_ int) (*Transaction, error) {
 	}
 	return NewTransaction(tx, tx, nil)
 }
-
-func (dbu *DBURL) Close() error {
-	return dbu.db.Close()
-}

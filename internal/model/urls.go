@@ -62,7 +62,7 @@ func (u *URL) delete(key string) error {
 }
 
 func (u *URL) PingContext(ctx context.Context) error {
-	return errors.New("нет доступа к бд")
+	return nil
 }
 
 // имитируем транзакцию
@@ -121,9 +121,5 @@ func (u *URL) SetTx(_ context.Context, key, value string) error {
 		return errors.New(key + " ключ уже занят в транзакции")
 	}
 	u.transactionBuffer[key] = value
-	return nil
-}
-
-func (u *URL) Close() error {
 	return nil
 }

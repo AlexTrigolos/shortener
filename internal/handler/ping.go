@@ -8,17 +8,17 @@ import (
 	"go.uber.org/zap"
 )
 
-type DB interface {
+type Pinger interface {
 	PingContext(ctx context.Context) error
 }
 
 type Ping struct {
-	db     DB
+	urls     Pinger
 	logger *zap.Logger
 }
 
-func NewPing(db DB, logger *zap.Logger) *Ping {
-	return &Ping{db: db, logger: logger}
+func NewPing(urls Pinger, logger *zap.Logger) *Ping {
+	return &Ping{urls: urls, logger: logger}
 }
 
 func (p *Ping) PingHandler() http.HandlerFunc {
@@ -26,7 +26,7 @@ func (p *Ping) PingHandler() http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
 		defer cancel()
 
-		if err := p.db.PingContext(ctx); err != nil {
+		if err := p.urls.PingContext(ctx); err != nil {
 			p.logger.Error("бд не отвечает", zap.String("Error", err.Error()))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return

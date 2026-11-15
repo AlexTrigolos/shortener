@@ -142,7 +142,7 @@ func (uwf *URLWithFile) save(key, value string) error {
 }
 
 func (uwf *URLWithFile) PingContext(ctx context.Context) error {
-	return errors.New("нет доступа к бд")
+	return nil
 }
 
 // имитируем транзакцию
@@ -250,9 +250,5 @@ func (uwf *URLWithFile) SetTx(ctx context.Context, key, value string) error {
 		return errors.New(key + " ключ уже занят в транзакции")
 	}
 	uwf.transactionBuffer[key] = value
-	return nil
-}
-
-func (uwf *URLWithFile) Close() error {
 	return nil
 }

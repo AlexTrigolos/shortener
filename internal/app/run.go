@@ -87,12 +87,6 @@ func (a App) RunApp() error {
 	if URLErr != nil {
 		return logAndReturnError(logger, URLErr)
 	}
-	defer func() {
-		err := URLs.Close()
-		if err != nil {
-			logAndReturnError(logger, err)
-		}
-	}()
 	r := router.NewGenerateRouter(URLs)
 
 	rtr, err := r.GenerateRoute(flags.BaseURL, server)

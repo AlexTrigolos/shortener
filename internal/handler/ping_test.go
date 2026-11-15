@@ -31,9 +31,9 @@ func TestNewPing(t *testing.T) {
 	t.Run("создать новый Ping", func(t *testing.T) {
 		newPing := NewPing(MockSuccessDB{}, logger)
 
-		expectedPing := &Ping{db: MockSuccessDB{}, logger: logger}
+		expectedPing := &Ping{urls: MockSuccessDB{}, logger: logger}
 		require.IsType(t, expectedPing, newPing)
-		assert.Equal(t, expectedPing.db, newPing.db)
+		assert.Equal(t, expectedPing.urls, newPing.urls)
 		assert.Equal(t, expectedPing.logger, newPing.logger)
 	})
 }
@@ -43,7 +43,7 @@ func TestPingHandler(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		dataBase       DB
+		dataBase       Pinger
 		wantStatusCode int
 		wantBody       string
 	}{
