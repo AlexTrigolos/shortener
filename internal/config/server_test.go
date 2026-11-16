@@ -20,7 +20,7 @@ func TestPrepareServer(t *testing.T) {
 
 		expectedServer := &Server{
 			ListenAndServe:   http.ListenAndServe,
-			Flags:            Config{Addr: ":8080", BaseURL: "http://localhost:8080", FileStoragePath: "./urls_storage.json"},
+			Flags:            Config{Addr: ":8080", BaseURL: "http://localhost:8080", FileStoragePath: ""},
 			Logger:           logger,
 			LoggerMiddleware: middleware.LoggerMiddleware(logger),
 			GzipMiddleware:   middleware.GzipMiddleware,
