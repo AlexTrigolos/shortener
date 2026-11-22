@@ -14,6 +14,7 @@ type Config struct {
 	BaseURL         string `env:"BASE_URL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	DataBase        string `env:"DATABASE_DSN"`
+	SecretKey       string `env:"SECRET_KEY"`
 }
 
 func (c *Config) prepareURL() error {
@@ -35,11 +36,16 @@ func ParseFlags() (Config, error) {
 	f.StringVarP(&config.BaseURL, "base-url", "b", "http://localhost:8080/unknown_short_url", "host (and port) for short urls")
 	f.StringVarP(&config.FileStoragePath, "file-storage-path", "f", "", "path to file storage for save urls")
 	f.StringVarP(&config.DataBase, "data-base", "d", "", "postgresql connection string")
+	f.StringVarP(&config.SecretKey, "secret-key", "s", "secret key", "secret key for cookies auth")
 	f.Parse(os.Args[1:])
 
 	err := env.Parse(&config)
 	if err != nil {
 		return config, err
+	}
+
+	if config.SecretKey == "" {
+		return config, errors.New("секретный ключ не указан")
 	}
 
 	err = config.prepareURL()

@@ -23,8 +23,8 @@ func NewDBURL(db *sql.DB, migration MigrationService) (*DBURL, *database.Driver,
 	return &DBURL{db: db}, dbDrv, m, err
 }
 
-func (dbu *DBURL) Set(ctx context.Context, key, value string) error {
-	_, err := dbu.db.ExecContext(ctx, "INSERT INTO urls (short, original) VALUES ($1, $2)", key, value)
+func (dbu *DBURL) Set(ctx context.Context, key, value, userID string) error {
+	_, err := dbu.db.ExecContext(ctx, "INSERT INTO urls (short, original, user_id) VALUES ($1, $2, $3)", key, value, userID)
 	if err == nil {
 		return nil
 	}
@@ -54,7 +54,7 @@ func (dbu *DBURL) Get(ctx context.Context, key string) (string, error) {
 	return original, nil
 }
 
-func (dbu *DBURL) GetByOriginal(ctx context.Context, original string) (string, error) {
+func (dbu *DBURL) GetByOriginal(ctx context.Context, original, baseURL string) (string, error) {
 	row := dbu.db.QueryRowContext(ctx, "SELECT short FROM urls WHERE original = $1", original)
 	var short string
 
@@ -62,7 +62,31 @@ func (dbu *DBURL) GetByOriginal(ctx context.Context, original string) (string, e
 	if err != nil {
 		return "", err
 	}
-	return short, nil
+	return baseURL + "/" + short, nil
+}
+
+func (dbu *DBURL) GetByUserID(ctx context.Context, userID, baseURL string) (*[]UserURL, error) {
+	rows, err := dbu.db.QueryContext(ctx, "SELECT short, original FROM urls WHERE user_id = $1", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var urls []UserURL
+	for rows.Next() {
+		var url UserURL
+		if err := rows.Scan(&url.ShortURL, &url.OriginalURL); err != nil {
+			return nil, err
+		}
+		url.ShortURL = baseURL + "/" + url.ShortURL
+		urls = append(urls, url)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return &urls, nil
 }
 
 func (dbu *DBURL) PingContext(ctx context.Context) error {

@@ -1,7 +1,4 @@
 # go-musthave-shortener-tpl
-
-Шаблон репозитория для трека «Сервис сокращения URL».
-
 ## Начало работы
 
 1. Склонируйте репозиторий в любую подходящую директорию на вашем компьютере.
@@ -39,11 +36,11 @@ git fetch template && git checkout template/v2 .github
 
 Далее в командной строке можно выполнить `shortenertest_v2.exe -test.v -test.run=^TestIteration12$ -binary-path=cmd/shortener/shortener -source-path=./ -server-port=8080 -file-storage-path=./urls_storage.json -database-dsn="host=localhost port=5432 user=urls password=password dbname=urls sslmode=disable"`. Где `TestIteration1` должен на конце иметь номер итерации, `-binary-path` имеет ссылку сформированную ранее, `-source-path` имеет `./` ведь находится сам в корне и будет запускать тесты на `./...`, `-server-port` должен иметь порт под которым по дефолту запускается сервер, `-file-storage-path` ссылается на хранение файла для теста, `-database-dsn` строка для подключения к реальной бд.
 
+### Миграция
+
+`migrate create -ext sql -dir internal/db/migrations -format "20060102150405" -tz "Europe/Moscow" create_users_table`
+
 ## Структура проекта
-
-Приведённая в этом репозитории структура проекта является рекомендуемой, но не обязательной.
-
-Это лишь пример организации кода, который поможет вам в реализации сервиса.
 
 При необходимости можно вносить изменения в структуру проекта, использовать любые библиотеки и предпочитаемые структурные паттерны организации кода приложения, например:
 - **DDD** (Domain-Driven Design)
