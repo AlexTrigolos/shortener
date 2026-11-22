@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/AlexTrigolos/shortener/internal/config"
@@ -15,26 +16,23 @@ import (
 
 type MockedDBURL struct{}
 
-func (mdb MockedDBURL) Set(ctx context.Context, key, value string) error {
+func (mdb MockedDBURL) Set(ctx context.Context, key, value, userID string) error {
 	return nil
 }
 func (mdb MockedDBURL) Get(ctx context.Context, key string) (string, error) {
 	return "", nil
 }
-func (mdb MockedDBURL) GetByOriginal(ctx context.Context, original string) (string, error) {
+func (mdb MockedDBURL) GetByOriginal(ctx context.Context, original, baseURL string) (string, error) {
 	return "", nil
+}
+func (mdb MockedDBURL) GetByUserID(_ context.Context, userID, baseURL string) (*[]model.UserURL, error) {
+	return &[]model.UserURL{}, nil
 }
 func (mdb MockedDBURL) PingContext(ctx context.Context) error {
 	return nil
 }
 func (mdb MockedDBURL) Begin(int) (*model.Transaction, error) {
 	return nil, nil
-}
-func (mdb MockedDBURL) SetTx(ctx context.Context, key string, value string) error {
-	return nil
-}
-func (mdb MockedDBURL) Close() error {
-	return nil
 }
 
 func TestNewGenerateRouter(t *testing.T) {
@@ -50,6 +48,9 @@ func TestNewGenerateRouter(t *testing.T) {
 }
 
 func TestGenerateRoute(t *testing.T) {
+	os.Setenv("SECRET_KEY", "key")
+	defer func() { os.Unsetenv("SECRET_KEY") }()
+
 	t.Run("удачный сгенерировали роуты", func(t *testing.T) {
 		gr := NewGenerateRouter(&MockedDBURL{})
 		server, err := config.PrepareServer()
@@ -65,16 +66,18 @@ func TestGenerateRoute(t *testing.T) {
 		// Post("/", handler.CompactHandler(baseURL)
 		// Get("/ping", handler.PingHandler)
 		// Get("/{id}", handler.GetHandler(newURL))
-		// Post("/api/shorten", handler.CompactHandler(baseURL)
-		// Post("/api/shorten/batch", handler.BatchCompactHandler(baseURL)
+		// Post("/api/shorten", api_handler.CompactHandler(baseURL)
+		// Post("/api/shorten/batch", api_handler.BatchCompactHandler(baseURL)
+		// Get("/api/user/urls", api_handler.GetUserURLsHandler(baseURL, gr.URLs, server.Logger))
 		req := resty.New().R()
-		requests := [6][2]string{
+		requests := [7][2]string{
 			{http.MethodGet, ""},
 			{http.MethodPost, ""},
 			{http.MethodGet, "/ping"},
 			{http.MethodGet, "/short"},
 			{http.MethodPost, "/api/shorten"},
 			{http.MethodPost, "/api/shorten/batch"},
+			{http.MethodGet, "/api/user/urls"},
 		}
 		for _, request := range requests {
 			req.Method = request[0]

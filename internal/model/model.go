@@ -4,6 +4,11 @@ import "errors"
 
 var ErrConflict = errors.New("conflict")
 
+type UserURL struct {
+	ShortURL    string `json:"short_url"`
+	OriginalURL string `json:"original_url"`
+}
+
 type Request struct {
 	URL string `json:"url"`
 }

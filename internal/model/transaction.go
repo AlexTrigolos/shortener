@@ -16,7 +16,7 @@ type Tx interface {
 }
 
 type SelfSetTx interface {
-	SetTx(ctx context.Context, key, value string) error
+	SetTx(ctx context.Context, key, value, userID string) error
 }
 
 type Transaction struct {
@@ -45,11 +45,11 @@ func (t *Transaction) Commit() error {
 	return t.tx.Commit()
 }
 
-func (t *Transaction) SetTx(ctx context.Context, key, value string) (err error) {
+func (t *Transaction) SetTx(ctx context.Context, key, value, userID string) (err error) {
 	if t.executer != nil {
-		_, err = t.executer.ExecContext(ctx, "INSERT INTO urls (short, original) VALUES ($1, $2)", key, value)
+		_, err = t.executer.ExecContext(ctx, "INSERT INTO urls (short, original, user_id) VALUES ($1, $2, $3)", key, value, userID)
 	} else if t.selfSetTx != nil {
-		err = t.selfSetTx.SetTx(ctx, key, value)
+		err = t.selfSetTx.SetTx(ctx, key, value, userID)
 	}
 	return
 }

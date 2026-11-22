@@ -28,7 +28,7 @@ func (*MockExecuter) ExecContext(ctx context.Context, query string, args ...any)
 
 type MockTxSetter struct{}
 
-func (*MockTxSetter) SetTx(ctx context.Context, key, value string) error {
+func (*MockTxSetter) SetTx(ctx context.Context, key, value, userID string) error {
 	return nil
 }
 
@@ -104,8 +104,8 @@ func TestTransaction_SetTx(t *testing.T) {
 	defer db.Close()
 	
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES").
-		WithArgs("key", "value").
+	mock.ExpectExec("INSERT INTO urls \\(short, original, user_id\\) VALUES").
+		WithArgs("key", "value", "user_id").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	dbTR, err := db.Begin()
@@ -136,7 +136,7 @@ func TestTransaction_SetTx(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transaction, err := NewTransaction(tt.tx, tt.executer, tt.selfSetTx)
 			require.NoError(t, err)
-			err = transaction.SetTx(t.Context(), "key", "value")
+			err = transaction.SetTx(t.Context(), "key", "value", "user_id")
 			require.NoError(t, err)
 			if tt.wantDBMock {
 				require.NoError(t, mock.ExpectationsWereMet())

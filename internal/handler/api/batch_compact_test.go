@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlexTrigolos/shortener/internal/auth"
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/AlexTrigolos/shortener/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -20,23 +21,23 @@ import (
 )
 
 const (
-	batchShortURL = "AwHXdJfB"
+	batchShortURL = batchBaseURL + "/AwHXdJfB"
 	batchBaseURL  = "http://localhost:8080"
 )
 
 type MockBatchGenerator struct{}
 
-func (mg MockBatchGenerator) BatchGenerateAndSetUniqURL(ctx context.Context, originalURLs *[]model.BatchRequest, baseURL string) (*[]model.BatchResponse, error) {
+func (mg MockBatchGenerator) BatchGenerateAndSetUniqURL(ctx context.Context, originalURLs *[]model.BatchRequest, baseURL string, userID string) (*[]model.BatchResponse, error) {
 	resp := []model.BatchResponse{}
 	for _, o := range *originalURLs {
-		resp = append(resp, model.BatchResponse{CorrelationID: o.CorrelationID, ShortURL: batchBaseURL + "/" + batchShortURL})
+		resp = append(resp, model.BatchResponse{CorrelationID: o.CorrelationID, ShortURL: batchShortURL})
 	}
 	return &resp, nil
 }
 
 type MockBatchFailGenerator struct{}
 
-func (mg MockBatchFailGenerator) BatchGenerateAndSetUniqURL(ctx context.Context, originalURLs *[]model.BatchRequest, baseURL string) (*[]model.BatchResponse, error) {
+func (mg MockBatchFailGenerator) BatchGenerateAndSetUniqURL(ctx context.Context, originalURLs *[]model.BatchRequest, baseURL string, userID string) (*[]model.BatchResponse, error) {
 	return &[]model.BatchResponse{}, errors.New("исчерпано количество попыток создать короткую ссылку")
 }
 
@@ -77,7 +78,7 @@ func TestBatchCompactHandler(t *testing.T) {
 			want: want{
 				statusCode:  201,
 				contentType: "application/json",
-				response:    "[{\"correlation_id\":\"1\",\"short_url\":\"" + batchBaseURL + "/" + batchShortURL + "\"},{\"correlation_id\":\"2\",\"short_url\":\"" + batchBaseURL + "/" + batchShortURL + "\"}]\n",
+				response:    "[{\"correlation_id\":\"1\",\"short_url\":\"" + batchShortURL + "\"},{\"correlation_id\":\"2\",\"short_url\":\"" + batchShortURL + "\"}]\n",
 			},
 		},
 		{
@@ -112,7 +113,7 @@ func TestBatchCompactHandler(t *testing.T) {
 		},
 		{
 			name:            "передан слишком длинный url",
-			body:            "[{\"correlation_id\":\"\",\"original_url\":\"" + strings.Repeat("a", 1000) +"\"}]",
+			body:            "[{\"correlation_id\":\"\",\"original_url\":\"" + strings.Repeat("a", 1000) + "\"}]",
 			generatorStruct: MockBatchGenerator{},
 			want: want{
 				statusCode:  413,
@@ -134,7 +135,9 @@ func TestBatchCompactHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			apiCompact := NewBatchCompact(tt.generatorStruct, zap.NewNop())
-			handler.Post("/api/shorten/batch", apiCompact.BatchCompactHandler(batchBaseURL))
+			handler.Post("/api/shorten/batch", func(w http.ResponseWriter, r *http.Request) {
+				apiCompact.BatchCompactHandler(batchBaseURL).ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.CookieName, "user_id.sidned")))
+			})
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
 

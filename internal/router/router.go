@@ -15,9 +15,10 @@ import (
 )
 
 type GetterSetterWithConflictDBReady interface {
-	Set(ctx context.Context, key, value string) error
+	Set(ctx context.Context, key, value, userID string) error
 	Get(ctx context.Context, key string) (string, error)
-	GetByOriginal(ctx context.Context, original string) (string, error)
+	GetByOriginal(ctx context.Context, original, baseURL string) (string, error)
+	GetByUserID(_ context.Context, userID, baseURL string) (*[]model.UserURL, error)
 
 	PingContext(ctx context.Context) error
 	Begin(count int) (*model.Transaction, error)
@@ -34,8 +35,7 @@ func NewGenerateRouter(nu GetterSetterWithConflictDBReady) *GenerateRouter {
 func (gr *GenerateRouter) GenerateRoute(baseURL string, server *config.Server) (chi.Router, error) {
 	r := chi.NewRouter()
 
-	// middleware.Logger убрал втоматическое логирование
-	r.Use(middleware.ClientIPFromRemoteAddr, server.GzipMiddleware, server.LoggerMiddleware, middleware.Recoverer)
+	r.Use(middleware.ClientIPFromRemoteAddr, server.GzipMiddleware, server.LoggerMiddleware, server.SignedCookieMiddleware, middleware.Recoverer)
 
 	generateURL := service.NewGenerateURL(randstr.String, gr.URLs)
 	compact := handler.NewCompact(generateURL, server.Logger)
@@ -53,9 +53,12 @@ func (gr *GenerateRouter) GenerateRoute(baseURL string, server *config.Server) (
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", handler.GetHandler(gr.URLs))
 		})
-		r.Route("/api/shorten", func(r chi.Router) {
-			r.Post("/", apiCompact.CompactHandler(baseURL))
-			r.Post("/batch", apiBatchCompact.BatchCompactHandler(baseURL))
+		r.Route("/api", func(r chi.Router) {
+			r.Get("/user/urls", api_handler.GetUserURLsHandler(baseURL, gr.URLs, server.Logger))
+			r.Route("/shorten", func(r chi.Router) {
+				r.Post("/", apiCompact.CompactHandler(baseURL))
+				r.Post("/batch", apiBatchCompact.BatchCompactHandler(baseURL))
+			})
 		})
 	})
 

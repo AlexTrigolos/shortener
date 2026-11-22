@@ -3,11 +3,15 @@ package model
 import (
 	"encoding/json"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	uwfUserID  = "user_id"
+	uwfBaseURL = "base_url"
 )
 
 func TestNewURLWithFile(t *testing.T) {
@@ -69,7 +73,8 @@ func TestNewURLWithFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			newURLWithFile, err := NewURLWithFile(tt.filename)
 			require.NoError(t, err)
-			assert.Equal(t, reflect.TypeOf(tt.want), reflect.TypeOf(newURLWithFile))
+
+			assert.Equal(t, &URLWithFile{URL: newURLWithFile.URL, fileStoragePath: tt.filename, transactionUserID: ""}, newURLWithFile)
 
 			data, err := os.ReadFile(tt.filename)
 			require.NoError(t, err)
@@ -123,11 +128,11 @@ func TestURLWithFile_Set(t *testing.T) {
 			require.NoError(t, err)
 
 			urlsCount := 1
-			urlsWithFile := &URLWithFile{URL: &URL{data: map[string]string{}, values: map[string]string{}}, fileStoragePath: filename}
+			urlsWithFile := &URLWithFile{URL: &URL{data: map[string]string{}, values: map[string]string{}, byUserIds: map[string][]UserURL{}}, fileStoragePath: filename}
 			if tt.name != "добавление нового ключа в пустой" {
-				urlsWithFile.URL.Set(t.Context(), "key1", "value1")
+				urlsWithFile.URL.Set(t.Context(), "key1", "value1", uwfUserID)
 
-				newData, err := addingSlice{key: "key1", value: "value1", count: urlsCount}.marshalJSON()
+				newData, err := addingSlice{key: "key1", value: "value1", count: urlsCount, userID: uwfUserID}.marshalJSON()
 				require.NoError(t, err)
 				urlsCount++
 				wantFileData = append(wantFileData[:len(wantFileData)-1], newData...)
@@ -138,7 +143,7 @@ func TestURLWithFile_Set(t *testing.T) {
 			require.NoError(t, err)
 
 			if tt.wantErr == "" {
-				newData, err := addingSlice{key: "key0", value: "value0", count: urlsCount}.marshalJSON()
+				newData, err := addingSlice{key: "key0", value: "value0", count: urlsCount, userID: uwfUserID}.marshalJSON()
 				require.NoError(t, err)
 				lenWantFileData := len(wantFileData) - 1
 				if urlsCount == 2 {
@@ -148,15 +153,17 @@ func TestURLWithFile_Set(t *testing.T) {
 				wantFileData = append(wantFileData, []byte("\n]")...)
 			}
 
-			err = urlsWithFile.Set(t.Context(), tt.key, tt.value)
+			err = urlsWithFile.Set(t.Context(), tt.key, tt.value, uwfUserID)
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
 			} else {
 				require.NoError(t, err)
 				assert.Contains(t, urlsWithFile.URL.data, tt.key)
-				assert.Equal(t, urlsWithFile.URL.data[tt.key], tt.value)
+				assert.Equal(t, tt.value, urlsWithFile.URL.data[tt.key])
 				assert.Contains(t, urlsWithFile.URL.values, tt.value)
-				assert.Equal(t, urlsWithFile.URL.values[tt.value], tt.key)
+				assert.Equal(t, tt.key, urlsWithFile.URL.values[tt.value])
+				assert.Contains(t, urlsWithFile.URL.byUserIds, uwfUserID)
+				assert.Contains(t, urlsWithFile.URL.byUserIds[uwfUserID], UserURL{ShortURL: tt.key, OriginalURL: tt.value})
 			}
 
 			data, err := os.ReadFile(filename)
@@ -176,14 +183,14 @@ func TestURLWithFile_Get(t *testing.T) {
 	}{
 		{
 			name:    "получает значение по ключу",
-			urls:    &URLWithFile{URL: &URL{data: map[string]string{"key1": "value1"}, values: map[string]string{"value1": "key1"}}},
+			urls:    &URLWithFile{URL: &URL{data: map[string]string{"key1": "value1"}}},
 			key:     "key1",
 			wantVal: "value1",
 			wantErr: "",
 		},
 		{
 			name:    "не находит значение по ключу",
-			urls:    &URLWithFile{URL: &URL{data: map[string]string{}, values: map[string]string{}}},
+			urls:    &URLWithFile{URL: &URL{data: map[string]string{}}},
 			key:     "key1",
 			wantVal: "",
 			wantErr: "не найден ключ key1",
@@ -215,14 +222,14 @@ func TestURLWithFile_GetByOriginal(t *testing.T) {
 	}{
 		{
 			name:    "получает ключ по значению",
-			urls:    &URLWithFile{URL: &URL{data: map[string]string{"key1": "value1"}, values: map[string]string{"value1": "key1"}}},
+			urls:    &URLWithFile{URL: &URL{values: map[string]string{"value1": "key1"}}},
 			value:   "value1",
-			wantKey: "key1",
+			wantKey: uwfBaseURL + "/key1",
 			wantErr: "",
 		},
 		{
 			name:    "не находит ключ по значению",
-			urls:    &URLWithFile{URL: &URL{data: map[string]string{}, values: map[string]string{}}},
+			urls:    &URLWithFile{URL: &URL{values: map[string]string{}}},
 			value:   "value1",
 			wantKey: "",
 			wantErr: "не нашли значение value1",
@@ -231,15 +238,43 @@ func TestURLWithFile_GetByOriginal(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			urls := tt.urls
-			key, err := urls.GetByOriginal(t.Context(), tt.value)
-			assert.Equal(t, tt.wantKey, key)
-
+			key, err := urls.GetByOriginal(t.Context(), tt.value, uwfBaseURL)
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
-				return
+			} else {
+				require.NoError(t, err)
 			}
+			assert.Equal(t, tt.wantKey, key)
+		})
+	}
+}
 
+func TestURLWithFile_GetByUserID(t *testing.T) {
+	tests := []struct {
+		name     string
+		urls     *URLWithFile
+		userID  string
+		wantURLs []UserURL
+	}{
+		{
+			name:     "получает ключ по значению",
+			urls:     &URLWithFile{URL: &URL{byUserIds: map[string][]UserURL{uwfUserID: {{ShortURL: "key1", OriginalURL: "value1"}}}}},
+			userID:  uwfUserID,
+			wantURLs: []UserURL{{ShortURL: uwfBaseURL + "/key1", OriginalURL: "value1"}},
+		},
+		{
+			name:     "не находит ключ по значению",
+			urls:     &URLWithFile{URL: &URL{byUserIds: map[string][]UserURL{}}},
+			userID:  "unknown_user_id",
+			wantURLs: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			urls := tt.urls
+			userURls, err := urls.GetByUserID(t.Context(), tt.userID, uwfBaseURL)
 			require.NoError(t, err)
+			assert.Equal(t, tt.wantURLs, *userURls)
 		})
 	}
 }
@@ -272,7 +307,8 @@ func TestURLWithFile_Begin(t *testing.T) {
 		tr, err := uwf.Begin(5)
 		require.NoError(t, err)
 		assert.Equal(t, &Transaction{tx: uwf, selfSetTx: uwf, commited: false}, tr)
-		assert.NotNil(t, uwf.transactionBuffer)
+		assert.Equal(t, make(map[string]string, 5), uwf.transactionBuffer)
+		assert.Empty(t, uwf.transactionUserID)
 		assert.False(t, uwf.URL.mu.TryLock())
 	})
 }
@@ -300,6 +336,7 @@ func TestURLWithFile_Rollback(t *testing.T) {
 		err = uwf.Rollback()
 		require.NoError(t, err)
 		assert.Nil(t, uwf.transactionBuffer)
+		assert.Empty(t, uwf.transactionUserID)
 		assert.True(t, uwf.URL.mu.TryLock())
 	})
 }
@@ -324,14 +361,16 @@ func TestURLWithFile_Commit(t *testing.T) {
 		_, err = uwf.Begin(5)
 		require.NoError(t, err)
 
+		uwf.transactionUserID = uwfUserID
 		uwf.transactionBuffer["short_1"] = "long_1"
 		uwf.transactionBuffer["short_2"] = "long_2"
-		want1 := "[\n\t{\"original_url\":\"long_1\",\"short_url\":\"short_1\",\"uuid\":\"1\"},\n\t{\"original_url\":\"long_2\",\"short_url\":\"short_2\",\"uuid\":\"2\"}\n]"
-		want2 := "[\n\t{\"original_url\":\"long_2\",\"short_url\":\"short_2\",\"uuid\":\"1\"},\n\t{\"original_url\":\"long_1\",\"short_url\":\"short_1\",\"uuid\":\"2\"}\n]"
+		want1 := "[\n\t{\"original_url\":\"long_1\",\"short_url\":\"short_1\",\"user_id\":\"" + uwfUserID + "\",\"uuid\":\"1\"},\n\t{\"original_url\":\"long_2\",\"short_url\":\"short_2\",\"user_id\":\"" + uwfUserID + "\",\"uuid\":\"2\"}\n]"
+		want2 := "[\n\t{\"original_url\":\"long_2\",\"short_url\":\"short_2\",\"user_id\":\"" + uwfUserID + "\",\"uuid\":\"1\"},\n\t{\"original_url\":\"long_1\",\"short_url\":\"short_1\",\"user_id\":\"" + uwfUserID + "\",\"uuid\":\"2\"}\n]"
 
 		err = uwf.Commit()
 		require.NoError(t, err)
 		assert.Nil(t, uwf.transactionBuffer)
+		assert.Empty(t, uwf.transactionUserID)
 		assert.True(t, uwf.URL.mu.TryLock())
 
 		assert.Len(t, uwf.URL.data, 2)
@@ -346,9 +385,62 @@ func TestURLWithFile_Commit(t *testing.T) {
 		assert.Contains(t, uwf.URL.values, "long_2")
 		assert.Equal(t, uwf.URL.values["long_2"], "short_2")
 
+		assert.Len(t, uwf.URL.byUserIds, 1)
+		assert.Contains(t, uwf.URL.byUserIds, uUserID)
+		assert.Len(t, uwf.URL.byUserIds[uUserID], 2)
+		assert.Contains(t, uwf.URL.byUserIds, uUserID)
+		assert.Contains(t, uwf.URL.byUserIds[uUserID], UserURL{ShortURL: "short_1", OriginalURL: "long_1"})
+		assert.Contains(t, uwf.URL.byUserIds[uUserID], UserURL{ShortURL: "short_2", OriginalURL: "long_2"})
+
 		data, err := os.ReadFile(file.Name())
 		require.NoError(t, err)
 		require.True(t, want1 == string(data) || want2 == string(data))
+	})
+
+	badFile, err := os.CreateTemp(dirname, "*_bad_file.json")
+	require.NoError(t, err)
+	defer badFile.Close()
+
+	_, err = badFile.Write(emptyData)
+	require.NoError(t, err)
+
+	t.Run("совпадение при завершении транзакции", func(t *testing.T) {
+		uwf, err := NewURLWithFile(badFile.Name())
+		require.NoError(t, err)
+		err = uwf.Set(t.Context(), "short_2", "long_2", uwfUserID)
+		require.NoError(t, err)
+
+		_, err = uwf.Begin(5)
+		require.NoError(t, err)
+
+		uwf.transactionUserID = uwfUserID
+		uwf.transactionBuffer["short_1"] = "long_1"
+		uwf.transactionBuffer["short_2"] = "long_2"
+		want := "[\n\t{\"original_url\":\"long_2\",\"short_url\":\"short_2\",\"user_id\":\"" + uwfUserID + "\",\"uuid\":\"1\"}\n]"
+
+		err = uwf.Commit()
+		require.ErrorContains(t, err, "short_2 ключ уже занят")
+		assert.Nil(t, uwf.transactionBuffer)
+		assert.Empty(t, uwf.transactionUserID)
+		assert.True(t, uwf.URL.mu.TryLock())
+
+		assert.Len(t, uwf.URL.data, 1)
+		assert.Contains(t, uwf.URL.data, "short_2")
+		assert.Equal(t, uwf.URL.data["short_2"], "long_2")
+
+		assert.Len(t, uwf.URL.values, 1)
+		assert.Contains(t, uwf.URL.values, "long_2")
+		assert.Equal(t, uwf.URL.values["long_2"], "short_2")
+
+		assert.Len(t, uwf.URL.byUserIds, 1)
+		assert.Contains(t, uwf.URL.byUserIds, uUserID)
+		assert.Len(t, uwf.URL.byUserIds[uUserID], 1)
+		assert.Contains(t, uwf.URL.byUserIds, uUserID)
+		assert.Equal(t, uwf.URL.byUserIds[uUserID], []UserURL{{ShortURL: "short_2", OriginalURL: "long_2"}})
+
+		data, err := os.ReadFile(badFile.Name())
+		require.NoError(t, err)
+		require.True(t, want == string(data))
 	})
 }
 
@@ -372,11 +464,12 @@ func TestURLWithFile_SetTx(t *testing.T) {
 		_, err = uwf.Begin(5)
 		require.NoError(t, err)
 
-		err = uwf.SetTx(t.Context(), "key_1", "value_1")
+		err = uwf.SetTx(t.Context(), "key_1", "value_1", uwfUserID)
 		require.NoError(t, err)
-		err = uwf.SetTx(t.Context(), "key_2", "value_2")
+		err = uwf.SetTx(t.Context(), "key_2", "value_2", uwfUserID)
 		require.NoError(t, err)
-		assert.NotNil(t, uwf.transactionBuffer)
+		assert.Equal(t, map[string]string{"key_1": "value_1", "key_2": "value_2"}, uwf.transactionBuffer)
+		assert.Equal(t, uwfUserID, uwf.transactionUserID)
 		assert.False(t, uwf.URL.mu.TryLock())
 
 		assert.Len(t, uwf.URL.data, 1)
@@ -394,9 +487,10 @@ func TestURLWithFile_SetTx(t *testing.T) {
 		_, err = uwf.Begin(5)
 		require.NoError(t, err)
 
-		err = uwf.SetTx(t.Context(), "key_0", "value_0")
+		err = uwf.SetTx(t.Context(), "key_0", "value_0", uwfUserID)
 		require.ErrorContains(t, err, "key_0 ключ уже занят")
-		assert.NotNil(t, uwf.transactionBuffer)
+		assert.Equal(t, make(map[string]string, 5), uwf.transactionBuffer)
+		assert.Empty(t, uwf.transactionUserID)
 		assert.False(t, uwf.URL.mu.TryLock())
 
 		assert.Len(t, uwf.URL.data, 1)
@@ -409,11 +503,12 @@ func TestURLWithFile_SetTx(t *testing.T) {
 		_, err = uwf.Begin(5)
 		require.NoError(t, err)
 
-		err = uwf.SetTx(t.Context(), "key_1", "value_1")
+		err = uwf.SetTx(t.Context(), "key_1", "value_1", uwfUserID)
 		require.NoError(t, err)
-		err = uwf.SetTx(t.Context(), "key_1", "value_1")
+		err = uwf.SetTx(t.Context(), "key_1", "value_1", uwfUserID)
 		require.ErrorContains(t, err, "key_1 ключ уже занят")
-		assert.NotNil(t, uwf.transactionBuffer)
+		assert.Equal(t, map[string]string{"key_1": "value_1"}, uwf.transactionBuffer)
+		assert.Equal(t, uwfUserID, uwf.transactionUserID)
 		assert.False(t, uwf.URL.mu.TryLock())
 
 		assert.Len(t, uwf.URL.data, 1)

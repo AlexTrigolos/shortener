@@ -9,12 +9,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/AlexTrigolos/shortener/internal/auth"
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"go.uber.org/zap"
 )
 
 type BatchURLGenerator interface {
-	BatchGenerateAndSetUniqURL(ctx context.Context, originalURLs *[]model.BatchRequest, baseURL string) (*[]model.BatchResponse, error)
+	BatchGenerateAndSetUniqURL(ctx context.Context, originalURLs *[]model.BatchRequest, baseURL string, userID string) (*[]model.BatchResponse, error)
 }
 
 type BatchCompact struct {
@@ -52,22 +53,29 @@ func (c BatchCompact) BatchCompactHandler(baseURL string) http.HandlerFunc {
 		for i, r := range req {
 			URL := string(r.OriginalURL)
 			if URL == "" {
-				errStr := "переданный вами " + strconv.Itoa(i + 1) + " по счету original_url пустой"
+				errStr := "переданный вами " + strconv.Itoa(i+1) + " по счету original_url пустой"
 				http.Error(w, errStr, http.StatusBadRequest)
 				return
 			}
 			corr := string(r.CorrelationID)
 			if corr == "" {
-				errStr := "переданный вами " + strconv.Itoa(i + 1) + " по счету correlation_id пустой"
+				errStr := "переданный вами " + strconv.Itoa(i+1) + " по счету correlation_id пустой"
 				http.Error(w, errStr, http.StatusBadRequest)
 				return
 			}
 		}
 
+		userID, ok := r.Context().Value(auth.CookieName).(string)
+		if !ok {
+			c.logger.Error("не установлено значение user_id в контексте")
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
 		defer cancel()
 
-		resp, err := c.generator.BatchGenerateAndSetUniqURL(ctx, &req, baseURL)
+		resp, err := c.generator.BatchGenerateAndSetUniqURL(ctx, &req, baseURL, userID)
 		if err != nil {
 			c.logger.Error("создание короткой ссылки", zap.String("Error", err.Error()))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

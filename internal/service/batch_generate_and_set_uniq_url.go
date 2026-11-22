@@ -20,7 +20,7 @@ func NewBatchGenerateURL(rs func(n int, letters ...string) string, storage Batch
 	return &BatchGenerateURL{randStr: rs, storage: storage}
 }
 
-func (gu BatchGenerateURL) BatchGenerateAndSetUniqURL(ctx context.Context, originalURLs *[]model.BatchRequest, baseURL string) (*[]model.BatchResponse, error) {
+func (gu BatchGenerateURL) BatchGenerateAndSetUniqURL(ctx context.Context, originalURLs *[]model.BatchRequest, baseURL string, userID string) (*[]model.BatchResponse, error) {
 	shortLen := 8
 	randBatch := 100
 	generateCount := shortLen * randBatch
@@ -48,7 +48,7 @@ func (gu BatchGenerateURL) BatchGenerateAndSetUniqURL(ctx context.Context, origi
 			uniqURL := generatedStr[startStr:endStr]
 			startStr += shortLen
 			endStr += shortLen
-			err := tx.SetTx(ctx, uniqURL, originalURLInfo.OriginalURL)
+			err := tx.SetTx(ctx, uniqURL, originalURLInfo.OriginalURL, userID)
 			if err == nil {
 				result = append(result, model.BatchResponse{CorrelationID: originalURLInfo.CorrelationID, ShortURL: baseURL + "/" + uniqURL})
 				break
