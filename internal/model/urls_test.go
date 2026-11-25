@@ -23,6 +23,7 @@ func TestNewURL(t *testing.T) {
 			values:            map[string]string{},
 			transactionBuffer: nil,
 			byUserIds:         map[string][]UserURL{},
+			deleteFlag: 	   map[string]struct{}{},
 			transactionUserID: "",
 		}, newURL)
 	})
@@ -78,7 +79,7 @@ func TestURL_Set(t *testing.T) {
 }
 
 func TestURL_Get(t *testing.T) {
-	urls := &URL{data: map[string]string{"key1": "value1"}}
+	urls := &URL{data: map[string]string{"key1": "value1"}, deleteFlag: map[string]struct{}{"key_del": {}}}
 	tests := []struct {
 		name    string
 		key     string
@@ -96,6 +97,12 @@ func TestURL_Get(t *testing.T) {
 			key:     "key0",
 			wantVal: "",
 			wantErr: "не найден ключ key0",
+		},
+		{
+			name:    "ключ удален",
+			key:     "key_del",
+			wantVal: "",
+			wantErr: "deleted",
 		},
 	}
 	for _, tt := range tests {
@@ -276,8 +283,8 @@ func TestURL_Commit(t *testing.T) {
 		assert.Len(t, urls.byUserIds, 1)
 		assert.Contains(t, urls.byUserIds, uUserID)
 		assert.Len(t, urls.byUserIds[uUserID], 2)
-		assert.Contains(t, urls.byUserIds, uUserID)
-		assert.Equal(t, urls.byUserIds[uUserID], []UserURL{{ShortURL: "short_1", OriginalURL: "long_1"}, {ShortURL: "short_2", OriginalURL: "long_2"}})
+		assert.Contains(t, urls.byUserIds[uUserID], UserURL{ShortURL: "short_1", OriginalURL: "long_1"})
+		assert.Contains(t, urls.byUserIds[uUserID], UserURL{ShortURL: "short_2", OriginalURL: "long_2"})
 	})
 	t.Run("совпадение при завершении транзакции", func(t *testing.T) {
 		urls := &URL{

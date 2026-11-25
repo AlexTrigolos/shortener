@@ -12,6 +12,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type MockedDBURL struct{}
@@ -28,6 +29,12 @@ func (mdb MockedDBURL) GetByOriginal(ctx context.Context, original, baseURL stri
 func (mdb MockedDBURL) GetByUserID(_ context.Context, userID, baseURL string) (*[]model.UserURL, error) {
 	return &[]model.UserURL{}, nil
 }
+func (mdb MockedDBURL) CheckUserIDURLs(ctx context.Context, urls []string, userID string) error {
+	return nil
+}
+func (mdb MockedDBURL) DeleteURLs(ctx context.Context, urls []model.URLsData) error {
+	return nil
+}
 func (mdb MockedDBURL) PingContext(ctx context.Context) error {
 	return nil
 }
@@ -39,7 +46,10 @@ func TestNewGenerateRouter(t *testing.T) {
 	t.Run("создать новый GenerateRouter", func(t *testing.T) {
 		urls1, err := model.NewURL()
 		require.NoError(t, err)
-		newGenerateRouter := NewGenerateRouter(urls1)
+		doneCh := make(chan struct{})
+		deleter, _ := model.NewDeleter(doneCh, urls1, zap.NewNop())
+		defer close(doneCh)
+		newGenerateRouter := NewGenerateRouter(urls1, deleter)
 
 		urls2, err := model.NewURL()
 		require.NoError(t, err)
@@ -52,7 +62,10 @@ func TestGenerateRoute(t *testing.T) {
 	defer func() { os.Unsetenv("SECRET_KEY") }()
 
 	t.Run("удачный сгенерировали роуты", func(t *testing.T) {
-		gr := NewGenerateRouter(&MockedDBURL{})
+		doneCh := make(chan struct{})
+		deleter, _ := model.NewDeleter(nil, &MockedDBURL{}, zap.NewNop())
+		defer close(doneCh)
+		gr := NewGenerateRouter(&MockedDBURL{}, deleter)
 		server, err := config.PrepareServer()
 		require.NoError(t, err)
 		router, err := gr.GenerateRoute("flagbaseURL", server)
@@ -69,8 +82,9 @@ func TestGenerateRoute(t *testing.T) {
 		// Post("/api/shorten", api_handler.CompactHandler(baseURL)
 		// Post("/api/shorten/batch", api_handler.BatchCompactHandler(baseURL)
 		// Get("/api/user/urls", api_handler.GetUserURLsHandler(baseURL, gr.URLs, server.Logger))
+		// Delete("/api/user/urls", api_handler.GetUserURLsHandler(gr.URLs, gr.deleter, server.Logger))
 		req := resty.New().R()
-		requests := [7][2]string{
+		requests := [8][2]string{
 			{http.MethodGet, ""},
 			{http.MethodPost, ""},
 			{http.MethodGet, "/ping"},
@@ -78,6 +92,7 @@ func TestGenerateRoute(t *testing.T) {
 			{http.MethodPost, "/api/shorten"},
 			{http.MethodPost, "/api/shorten/batch"},
 			{http.MethodGet, "/api/user/urls"},
+			{http.MethodDelete, "/api/user/urls"},
 		}
 		for _, request := range requests {
 			req.Method = request[0]

@@ -113,7 +113,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 	ConflictRandFunc := func(n int, letters ...string) string { return conflictRandStr }
 	mockConflict.ExpectExec("INSERT INTO urls \\(short, original, user_id\\) VALUES \\(\\$1, \\$2, \\$3\\)").
 		WithArgs(conflictRandStr, notUniqOriginal, userID).
-		WillReturnError(&pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "duplicate key value violates unique constraint", ConstraintName: "idx_urls_original"})
+		WillReturnError(&pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "duplicate key value violates unique constraint", ConstraintName: "uniq_original_not_deleted"})
 	mockConflict.ExpectQuery("SELECT short FROM urls WHERE original = \\$1").
 		WithArgs(notUniqOriginal).
 		WillReturnRows(sqlmock.NewRows([]string{"short"}).AddRow(notUniqURL))

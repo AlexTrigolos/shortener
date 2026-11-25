@@ -3,6 +3,7 @@ package model
 import "errors"
 
 var ErrConflict = errors.New("conflict")
+var ErrDeleted = errors.New("deleted")
 
 type UserURL struct {
 	ShortURL    string `json:"short_url"`

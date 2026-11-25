@@ -11,15 +11,17 @@ type URL struct {
 	data              map[string]string
 	values            map[string]string
 	byUserIds         map[string][]UserURL
+	deleteFlag       map[string]struct{}
 	transactionBuffer map[string]string
 	transactionUserID string
 }
 
 func NewURL() (*URL, error) {
 	return &URL{
-		data:      make(map[string]string),
-		values:    make(map[string]string),
-		byUserIds: make(map[string][]UserURL),
+		data:        make(map[string]string),
+		values:      make(map[string]string),
+		byUserIds:   make(map[string][]UserURL),
+		deleteFlag: make(map[string]struct{}),
 	}, nil
 }
 
@@ -43,6 +45,10 @@ func (u *URL) Set(_ context.Context, key, value, userID string) error {
 func (u *URL) Get(_ context.Context, key string) (string, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	_, exists := u.deleteFlag[key]
+	if exists {
+		return "", ErrDeleted
+	}
 	value, exists := u.data[key]
 	if !exists {
 		return "", errors.New("не найден ключ " + key)
@@ -89,7 +95,41 @@ func (u *URL) remove(key string, userID string) {
 	delete(u.data, key)
 }
 
-func (u *URL) PingContext(ctx context.Context) error {
+func (u *URL) CheckUserIDURLs(_ context.Context, urls []string, userID string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	mapa := map[string]struct{}{}
+	for _, url := range u.byUserIds[userID] {
+		mapa[url.ShortURL] = struct{}{}
+	}
+	for _, url := range urls {
+		if _, ok := mapa[url]; !ok {
+			return errors.New("не найден ключ " + url)
+		}
+	}
+	return nil
+}
+
+func (u *URL) DeleteURLs(_ context.Context, urlsData []URLsData) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for _, urlData := range urlsData {
+		for _, url := range urlData.Urls {
+			u.deleteFlag[url] = struct{}{}
+			delete(u.values, u.data[url])
+			delete(u.data, url)
+		}
+		userID := urlData.UserID
+		for i, v := range u.byUserIds[userID] {
+			if _, ok := u.deleteFlag[v.ShortURL]; ok {
+				u.byUserIds[userID] = append(u.byUserIds[userID][:i], u.byUserIds[userID][i+1:]...)
+			}
+		}
+	}
+	return nil
+}
+
+func (u *URL) PingContext(_ context.Context) error {
 	return nil
 }
 

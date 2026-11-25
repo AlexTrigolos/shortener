@@ -40,6 +40,8 @@ git fetch template && git checkout template/v2 .github
 
 `migrate create -ext sql -dir internal/db/migrations -format "20060102150405" -tz "Europe/Moscow" create_users_table`
 
+`migrate -database "postgres://urls:password@localhost:5432/urls?sslmode=disable" -path ./internal/db/migrations up`
+
 ## Структура проекта
 
 При необходимости можно вносить изменения в структуру проекта, использовать любые библиотеки и предпочитаемые структурные паттерны организации кода приложения, например:

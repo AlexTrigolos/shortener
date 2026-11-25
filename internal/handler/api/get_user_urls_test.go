@@ -33,12 +33,12 @@ func TestGetUserURLsHandler(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
+		name   string
 		userID string
-		want    Want
+		want   Want
 	}{
 		{
-			name:    "нашлось значение по ключу",
+			name:   "нашлось значение по ключу",
 			userID: "user_id",
 			want: Want{
 				statusCode:  200,
@@ -47,7 +47,7 @@ func TestGetUserURLsHandler(t *testing.T) {
 			},
 		},
 		{
-			name:    "нет записей с таким сокращением url",
+			name:   "нет записей с таким сокращением url",
 			userID: "unknown_user_id",
 			want: Want{
 				statusCode:  204,
