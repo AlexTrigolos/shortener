@@ -38,7 +38,7 @@ git fetch template && git checkout template/v2 .github
 
 ### Миграция
 
-`migrate create -ext sql -dir internal/db/migrations -format "20060102150405" -tz "Europe/Moscow" create_users_table`
+`migrate create -ext sql -dir internal/db/migrations -format 20060102150405 -tz "Europe/Moscow" create_users_table`
 
 `migrate -database "postgres://urls:password@localhost:5432/urls?sslmode=disable" -path ./internal/db/migrations up`
 

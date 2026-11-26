@@ -69,7 +69,9 @@ func (u *URL) GetByOriginal(_ context.Context, original, baseURL string) (string
 func (u *URL) GetByUserID(_ context.Context, userID, baseURL string) (*[]UserURL, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	userURLs := u.byUserIds[userID]
+
+	userURLs := make([]UserURL, len(u.byUserIds[userID]))
+	copy(userURLs, u.byUserIds[userID])
 
 	for i := range userURLs {
 		userURLs[i].ShortURL = baseURL + "/" + userURLs[i].ShortURL

@@ -273,7 +273,7 @@ func TestURLWithFile_GetByUserID(t *testing.T) {
 			name:     "не находит ключ по значению",
 			urls:     &URLWithFile{URL: &URL{byUserIds: map[string][]UserURL{}}},
 			userID:  "unknown_user_id",
-			wantURLs: nil,
+			wantURLs: []UserURL{},
 		},
 	}
 	for _, tt := range tests {

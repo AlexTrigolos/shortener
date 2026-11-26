@@ -155,7 +155,6 @@ func TestURL_GetByOriginal(t *testing.T) {
 }
 
 func TestURL_GetByUserID(t *testing.T) {
-	urls := &URL{byUserIds: map[string][]UserURL{uUserID: {{ShortURL: "key1", OriginalURL: "value1"}}}}
 	tests := []struct {
 		name     string
 		userID  string
@@ -169,16 +168,33 @@ func TestURL_GetByUserID(t *testing.T) {
 		{
 			name:     "не находит ключ по значению",
 			userID:  "unknown_user_id",
-			wantURLs: nil,
+			wantURLs: []UserURL{},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			urls := &URL{byUserIds: map[string][]UserURL{uUserID: {{ShortURL: "key1", OriginalURL: "value1"}}}}
 			userURls, err := urls.GetByUserID(t.Context(), tt.userID, uBaseURL)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantURLs, *userURls)
 		})
 	}
+	t.Run("двойное чтение с удалением", func(t *testing.T) {
+		urls := &URL{byUserIds: map[string][]UserURL{uUserID: {{ShortURL: "key1", OriginalURL: "value1"}}}}
+		wantURLs := []UserURL{{ShortURL: uBaseURL + "/key1", OriginalURL: "value1"}}
+
+		userURls, err := urls.GetByUserID(t.Context(), uUserID, uBaseURL)
+		require.NoError(t, err)
+		assert.Equal(t, wantURLs, *userURls)
+
+		userURls, err = urls.GetByUserID(t.Context(), uUserID, uBaseURL)
+		require.NoError(t, err)
+		assert.Equal(t, wantURLs, *userURls)
+
+		assert.Len(t, urls.byUserIds[uUserID], 1)
+		urls.delete("key1", uUserID)
+		assert.Len(t, urls.byUserIds[uUserID], 0)
+	})
 }
 
 func Test_delete(t *testing.T) {
