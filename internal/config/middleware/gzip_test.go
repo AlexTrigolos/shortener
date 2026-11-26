@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/AlexTrigolos/shortener/internal/auth"
 	"github.com/AlexTrigolos/shortener/internal/handler"
 	"github.com/AlexTrigolos/shortener/internal/handler/api"
 	"github.com/AlexTrigolos/shortener/internal/model"
@@ -25,7 +27,10 @@ func TestGzipMiddleware(t *testing.T) {
 	t.Run("sends_gzip", func(t *testing.T) {
 		urls, err := model.NewURL()
 		require.NoError(t, err)
-		handler := GzipMiddleware(http.HandlerFunc(api.NewCompact(service.NewGenerateURL(mockRandStr, urls), &zap.Logger{}).CompactHandler("https://host:port")))
+		handler := GzipMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(context.WithValue(r.Context(), auth.CookieName, "userID"))
+			api.NewCompact(service.NewGenerateURL(mockRandStr, urls), zap.NewNop()).CompactHandler("https://host:port").ServeHTTP(w, r)
+		}))
 		srv := httptest.NewServer(handler)
 		defer srv.Close()
 		requestBody := `{"url": "https://google.com"}`

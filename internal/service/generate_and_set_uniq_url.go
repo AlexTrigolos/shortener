@@ -8,8 +8,8 @@ import (
 )
 
 type SetterWithConflict interface {
-	Set(ctx context.Context, key, value string) error
-	GetByOriginal(ctx context.Context, original string) (string, error)
+	Set(ctx context.Context, key, value, userID string) error
+	GetByOriginal(ctx context.Context, original, baseURL string) (string, error)
 }
 
 type GenerateURL struct {
@@ -21,14 +21,14 @@ func NewGenerateURL(rs func(n int, letters ...string) string, storage SetterWith
 	return &GenerateURL{randStr: rs, storage: storage}
 }
 
-func (gu GenerateURL) GenerateAndSetUniqURL(ctx context.Context, originalURL string) (string, error) {
+func (gu GenerateURL) GenerateAndSetUniqURL(ctx context.Context, originalURL, userID, baseURL string) (string, error) {
 	for range 10 {
 		uniqURL := gu.randStr(8)
-		err := gu.storage.Set(ctx, uniqURL, originalURL)
+		err := gu.storage.Set(ctx, uniqURL, originalURL, userID)
 		if err == nil {
-			return uniqURL, nil
+			return baseURL + "/" + uniqURL, nil
 		} else if errors.Is(err, model.ErrConflict) {
-			uniqURL, getErr := gu.storage.GetByOriginal(ctx, originalURL)
+			uniqURL, getErr := gu.storage.GetByOriginal(ctx, originalURL, baseURL)
 			if getErr != nil {
 				return "", getErr
 			}

@@ -10,17 +10,23 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestGetHandler(t *testing.T) {
 	urls, err := model.NewURL()
 	require.NoError(t, err)
+	err = urls.Set(t.Context(), "removed.url", "orig.url", "user_id")
+	require.NoError(t, err)
+	err = urls.DeleteURLs(t.Context(), []model.URLsData{{Urls: []string{"removed.url"}, UserID: "user_id"}})
+	require.NoError(t, err)
 
 	handler := chi.NewRouter()
-	handler.Get("/{id}", GetHandler(urls))
+	handler.Get("/{id}", GetHandler(urls, zap.NewNop()))
 	srv := httptest.NewServer(handler)
 
-	urls.Set(t.Context(), "short.url", srv.URL)
+	err = urls.Set(t.Context(), "short.url", srv.URL, "user_id")
+	require.NoError(t, err)
 
 	defer srv.Close()
 
@@ -54,6 +60,16 @@ func TestGetHandler(t *testing.T) {
 				statusCode:  400,
 				contentType: "text/plain; charset=utf-8",
 				response:    "Не нашли запись для: unknown.url\n",
+			},
+		},
+		{
+			name:    "сокращение было удалено",
+			request: "/removed.url",
+			want: Want{
+				location:    "",
+				statusCode:  410,
+				contentType: "text/plain; charset=utf-8",
+				response:    "Gone\n",
 			},
 		},
 	}

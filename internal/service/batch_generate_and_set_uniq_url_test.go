@@ -18,7 +18,10 @@ import (
 	"github.com/thanhpk/randstr"
 )
 
-const baseURL = "http://localhost:8080"
+const(
+	batchBaseURL = "http://localhost:8080"
+	batchUserID = "batch_user_id"
+)
 
 func mockBatchRandStr(executedCount *int, f func(n int, letters ...string) string) func(n int, letters ...string) string {
 	return func(n int, letters ...string) string {
@@ -56,7 +59,7 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 	// просто urls
 	urls, err := model.NewURL()
 	require.NoError(t, err)
-	urls.Set(t.Context(), batchNotUniqURL[:8], "value")
+	urls.Set(t.Context(), batchNotUniqURL[:8], "value", batchUserID)
 
 	// с файлом
 	dirname := t.TempDir()
@@ -73,7 +76,7 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 
 	urlsWithFile, err := model.NewURLWithFile(newFile.Name())
 	require.NoError(t, err)
-	urlsWithFile.Set(t.Context(), batchNotUniqURL[:8], "value")
+	urlsWithFile.Set(t.Context(), batchNotUniqURL[:8], "value", batchUserID)
 
 	// БД
 	db, mock, err := sqlmock.New()
@@ -84,11 +87,11 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 	require.NoError(t, err)
 
 	mock.ExpectBegin()
-	mock.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
-		WithArgs(randStr[0:8], "original_1").
+	mock.ExpectExec("INSERT INTO urls \\(short, original, user_id\\) VALUES \\(\\$1, \\$2, \\$3\\)").
+		WithArgs(randStr[0:8], "original_1", batchUserID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
-		WithArgs(randStr[8:16], "original_2").
+	mock.ExpectExec("INSERT INTO urls \\(short, original, user_id\\) VALUES \\(\\$1, \\$2, \\$3\\)").
+		WithArgs(randStr[8:16], "original_2", batchUserID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -101,8 +104,8 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 
 	mockBad.ExpectBegin()
 	for i := 0; i < 10; i++ {
-		mockBad.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES").
-			WithArgs("ABab1221", "original_1").
+		mockBad.ExpectExec("INSERT INTO urls \\(short, original, user_id\\) VALUES \\(\\$1, \\$2, \\$3\\)").
+			WithArgs("ABab1221", "original_1", batchUserID).
 			WillReturnError(errors.New("есть такой short"))
 	}
 	mockBad.ExpectRollback()
@@ -155,7 +158,7 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 			var executedCount = 0
 
 			newBatchGenerateURL := NewBatchGenerateURL(mockBatchRandStr(&executedCount, tt.mockRand), tt.storage)
-			batchResponse, err := newBatchGenerateURL.BatchGenerateAndSetUniqURL(t.Context(), &originalURLs, baseURL)
+			batchResponse, err := newBatchGenerateURL.BatchGenerateAndSetUniqURL(t.Context(), &originalURLs, batchBaseURL, batchUserID)
 
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
@@ -166,7 +169,7 @@ func TestBatchGenerateAndSetUniqURL(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, &[]model.BatchResponse{{CorrelationID: "1", ShortURL: baseURL + "/" + randStr[0:8]}, {CorrelationID: "2", ShortURL: baseURL + "/" + randStr[8:16]}}, batchResponse)
+				assert.Equal(t, &[]model.BatchResponse{{CorrelationID: "1", ShortURL: batchBaseURL + "/" + randStr[0:8]}, {CorrelationID: "2", ShortURL: batchBaseURL + "/" + randStr[8:16]}}, batchResponse)
 				assert.Equal(t, 1, executedCount)
 				if _, ok := tt.storage.(*model.DBURL); ok {
 					require.NoError(t, mock.ExpectationsWereMet())

@@ -8,12 +8,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AlexTrigolos/shortener/internal/auth"
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"go.uber.org/zap"
 )
 
 type URLGenerator interface {
-	GenerateAndSetUniqURL(ctx context.Context, originalURL string) (string, error)
+	GenerateAndSetUniqURL(ctx context.Context, originalURL, userID, baseURL string) (string, error)
 }
 
 type Compact struct {
@@ -54,10 +55,17 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 			return
 		}
 
+		userID, ok := r.Context().Value(auth.CookieName).(string)
+		if !ok {
+			c.logger.Error("не установлено значение user_id в контексте")
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
 		defer cancel()
 
-		short, err := c.generator.GenerateAndSetUniqURL(ctx, originalURL)
+		short, err := c.generator.GenerateAndSetUniqURL(ctx, originalURL, userID, baseURL)
 		if err != nil && !errors.Is(err, model.ErrConflict) {
 			c.logger.Error("создание короткой ссылки", zap.String("Error", err.Error()))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -72,7 +80,7 @@ func (c Compact) CompactHandler(baseURL string) http.HandlerFunc {
 			w.WriteHeader(http.StatusCreated)
 		}
 
-		resp := model.Response{Result: baseURL + "/" + short}
+		resp := model.Response{Result: short}
 		enc := json.NewEncoder(w)
 		if err := enc.Encode(resp); err != nil {
 			c.logger.Error("сжатие ответа", zap.String("Error", err.Error()))

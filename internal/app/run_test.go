@@ -13,6 +13,13 @@ import (
 	"go.uber.org/zap"
 )
 
+type successes struct {
+	logger int
+	gzip   int
+	listen int
+	cookie int
+}
+
 func mockLoggerMiddleware(successLogger *int) func(h http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		*successLogger++
@@ -34,20 +41,28 @@ func mockSuccessListenAndServe(successLAS *int) func(addr string, handler http.H
 	}
 }
 
-func mockPrepareServer(successLogger *int, successGzip *int, filename string, successLAS *int, logger *zap.Logger, err error) func() (*config.Server, error) {
+func mockSignedCookieMiddleware(successCookie *int) func(h http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		*successCookie++
+		return h
+	}
+}
+
+func mockPrepareServer(successes *successes, filename string, logger *zap.Logger, err error) func() (*config.Server, error) {
 	return func() (*config.Server, error) {
 		return &config.Server{
-			ListenAndServe:   mockSuccessListenAndServe(successLAS),
-			Flags:            config.Config{FileStoragePath: filename},
-			Logger:           logger,
-			LoggerMiddleware: mockLoggerMiddleware(successLogger),
-			GzipMiddleware:   mockGzipMiddleware(successGzip),
+			ListenAndServe:         mockSuccessListenAndServe(&successes.listen),
+			Flags:                  config.Config{FileStoragePath: filename},
+			Logger:                 logger,
+			LoggerMiddleware:       mockLoggerMiddleware(&successes.logger),
+			GzipMiddleware:         mockGzipMiddleware(&successes.gzip),
+			SignedCookieMiddleware: mockSignedCookieMiddleware(&successes.cookie),
 		}, err
 	}
 }
 
-func mockApp(successLogger *int, successGzip *int, filename string, successLAS *int, logger *zap.Logger, err error) *App {
-	serverFunc := mockPrepareServer(successLogger, successGzip, filename, successLAS, logger, err)
+func mockApp(successes *successes, filename string, logger *zap.Logger, err error) *App {
+	serverFunc := mockPrepareServer(successes, filename, logger, err)
 	return &App{prepareServer: serverFunc}
 }
 
@@ -72,43 +87,47 @@ func TestRunApp(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name               string
-		logger             *zap.Logger
-		serverErr          error
-		errMessage         string
+		name       string
+		logger     *zap.Logger
+		serverErr  error
+		errMessage string
 	}{
 		{
-			name:               "удачный запуск",
-			logger:             zap.NewNop(),
-			serverErr:          nil,
-			errMessage:         "",
+			name:       "удачный запуск",
+			logger:     zap.NewNop(),
+			serverErr:  nil,
+			errMessage: "",
 		},
 		{
-			name:               "ошибка создания логера",
-			logger:             zap.NewNop(),
-			serverErr:          errors.New("что-то сломалось"),
-			errMessage:         "что-то сломалось",
+			name:       "ошибка создания логера",
+			logger:     zap.NewNop(),
+			serverErr:  errors.New("что-то сломалось"),
+			errMessage: "что-то сломалось",
 		},
 		{
-			name:               "ошибка подготовки сервера",
-			logger:             nil,
-			serverErr:          errors.New("не удалось создать логгер"),
-			errMessage:         "не удалось создать логгер",
+			name:       "ошибка подготовки сервера",
+			logger:     nil,
+			serverErr:  errors.New("не удалось создать логгер"),
+			errMessage: "не удалось создать логгер",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			successLAS, successLogger, successGzip := 0, 0, 0
-			app := mockApp(&successLogger, &successGzip, filename, &successLAS, tt.logger, tt.serverErr)
+			successes := successes{logger: 0, gzip: 0, listen: 0}
+			app := mockApp(&successes, filename, tt.logger, tt.serverErr)
 			err := app.RunApp()
 			if tt.errMessage == "" {
 				require.NoError(t, err)
-				assert.Equal(t, 1, successLAS)
-				assert.Equal(t, 1, successLogger)
+				assert.Equal(t, 1, successes.logger)
+				assert.Equal(t, 1, successes.listen)
+				assert.Equal(t, 1, successes.gzip)
+				assert.Equal(t, 1, successes.cookie)
 			} else {
 				require.ErrorContains(t, err, tt.errMessage)
-				assert.Equal(t, 0, successLAS)
-				assert.Equal(t, 0, successLogger)
+				assert.Equal(t, 0, successes.logger)
+				assert.Equal(t, 0, successes.listen)
+				assert.Equal(t, 0, successes.gzip)
+				assert.Equal(t, 0, successes.cookie)
 			}
 		})
 	}

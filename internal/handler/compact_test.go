@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AlexTrigolos/shortener/internal/auth"
 	"github.com/AlexTrigolos/shortener/internal/model"
 	"github.com/AlexTrigolos/shortener/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -20,25 +21,25 @@ import (
 )
 
 const (
-	shortURL = "EwHXdJfB"
+	shortURL = baseURL + "/EwHXdJfB"
 	baseURL  = "http://localhost:8080"
 )
 
 type MockGenerator struct{}
 
-func (mg MockGenerator) GenerateAndSetUniqURL(context.Context, string) (string, error) {
+func (mg MockGenerator) GenerateAndSetUniqURL(context.Context, string, string, string) (string, error) {
 	return shortURL, nil
 }
 
 type MockFailGenerator struct{}
 
-func (mg MockFailGenerator) GenerateAndSetUniqURL(context.Context, string) (string, error) {
+func (mg MockFailGenerator) GenerateAndSetUniqURL(context.Context, string, string, string) (string, error) {
 	return "", errors.New("исчерпано количество попыток создать короткую ссылку")
 }
 
 type MockConflictGenerator struct{}
 
-func (mg MockConflictGenerator) GenerateAndSetUniqURL(context.Context, string) (string, error) {
+func (mg MockConflictGenerator) GenerateAndSetUniqURL(context.Context, string, string, string) (string, error) {
 	return shortURL, model.ErrConflict
 }
 
@@ -79,7 +80,7 @@ func TestCompactHandler(t *testing.T) {
 			want: want{
 				statusCode:  201,
 				contentType: "text/plain",
-				response:    baseURL + "/" + shortURL,
+				response:    shortURL,
 			},
 		},
 		{
@@ -89,7 +90,7 @@ func TestCompactHandler(t *testing.T) {
 			want: want{
 				statusCode:  409,
 				contentType: "text/plain",
-				response:    baseURL + "/" + shortURL,
+				response:    shortURL,
 			},
 		},
 		{
@@ -126,7 +127,9 @@ func TestCompactHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			apiCompact := NewCompact(tt.generatorStruct, zap.NewNop())
-			handler.Post("/", apiCompact.CompactHandler(baseURL))
+			handler.Post("/", func(w http.ResponseWriter, r *http.Request) {
+				apiCompact.CompactHandler(baseURL).ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.CookieName, "user_id.sidned")))
+			})
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
 

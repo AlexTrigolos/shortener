@@ -20,8 +20,10 @@ import (
 )
 
 const (
+	baseURL         = "http://localhost:8080"
 	notUniqURL      = "ABab1221"
 	notUniqOriginal = "value"
+	userID          = "user_id"
 )
 
 func mockRandStr(executedCount *int, f func(n int, letters ...string) string) func(n int, letters ...string) string {
@@ -57,7 +59,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 	// просто urls
 	urls, err := model.NewURL()
 	require.NoError(t, err)
-	urls.Set(t.Context(), notUniqURL, notUniqOriginal)
+	urls.Set(t.Context(), notUniqURL, notUniqOriginal, userID)
 
 	// с файлом
 	dirname := t.TempDir()
@@ -74,7 +76,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 
 	urlsWithFile, err := model.NewURLWithFile(file.Name())
 	require.NoError(t, err)
-	urlsWithFile.Set(t.Context(), notUniqURL, notUniqOriginal)
+	urlsWithFile.Set(t.Context(), notUniqURL, notUniqOriginal, userID)
 
 	// БД
 	db, mock, err := sqlmock.New()
@@ -84,8 +86,8 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 	dbu, _, _, err := model.NewDBURL(db, &MockMigrationService{})
 	require.NoError(t, err)
 
-	mock.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
-		WithArgs(randStr, "originalStr_1").
+	mock.ExpectExec("INSERT INTO urls \\(short, original, user_id\\) VALUES \\(\\$1, \\$2, \\$3\\)").
+		WithArgs(randStr, "originalStr_1", userID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	dbBad, mockBad, err := sqlmock.New()
@@ -95,8 +97,8 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 	dbuBad, _, _, err := model.NewDBURL(dbBad, &MockMigrationService{})
 	require.NoError(t, err)
 	for i := 0; i < 10; i++ {
-		mockBad.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES").
-			WithArgs("ABab1221", "originalStr_2").
+		mockBad.ExpectExec("INSERT INTO urls \\(short, original, user_id\\) VALUES \\(\\$1, \\$2, \\$3\\)").
+			WithArgs("ABab1221", "originalStr_2", userID).
 			WillReturnError(errors.New("исчерпано количество попыток создать короткую ссылку"))
 	}
 
@@ -109,9 +111,9 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 
 	conflictRandStr := randstr.String(8)
 	ConflictRandFunc := func(n int, letters ...string) string { return conflictRandStr }
-	mockConflict.ExpectExec("INSERT INTO urls \\(short, original\\) VALUES \\(\\$1, \\$2\\)").
-		WithArgs(conflictRandStr, notUniqOriginal).
-		WillReturnError(&pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "duplicate key value violates unique constraint", ConstraintName: "idx_urls_original"})
+	mockConflict.ExpectExec("INSERT INTO urls \\(short, original, user_id\\) VALUES \\(\\$1, \\$2, \\$3\\)").
+		WithArgs(conflictRandStr, notUniqOriginal, userID).
+		WillReturnError(&pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "duplicate key value violates unique constraint", ConstraintName: "uniq_original_not_deleted"})
 	mockConflict.ExpectQuery("SELECT short FROM urls WHERE original = \\$1").
 		WithArgs(notUniqOriginal).
 		WillReturnRows(sqlmock.NewRows([]string{"short"}).AddRow(notUniqURL))
@@ -135,7 +137,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			newOriginal: "originalStr_1",
 			want: want{
 				err:          "",
-				result:       randStr,
+				result:       baseURL + "/" + randStr,
 				executeCount: 1,
 			},
 		},
@@ -157,7 +159,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			newOriginal: notUniqOriginal,
 			want: want{
 				err:          "conflict",
-				result:       notUniqURL,
+				result:       baseURL + "/" + notUniqURL,
 				executeCount: 1,
 			},
 		},
@@ -168,7 +170,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			newOriginal: "originalStr_1",
 			want: want{
 				err:          "",
-				result:       randStr,
+				result:       baseURL + "/" + randStr,
 				executeCount: 1,
 			},
 		},
@@ -190,7 +192,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			newOriginal: notUniqOriginal,
 			want: want{
 				err:          "conflict",
-				result:       notUniqURL,
+				result:       baseURL + "/" + notUniqURL,
 				executeCount: 1,
 			},
 		},
@@ -201,7 +203,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			newOriginal: "originalStr_1",
 			want: want{
 				err:          "",
-				result:       randStr,
+				result:       baseURL + "/" + randStr,
 				executeCount: 1,
 			},
 		},
@@ -223,7 +225,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			newOriginal: notUniqOriginal,
 			want: want{
 				err:          "conflict",
-				result:       notUniqURL,
+				result:       baseURL + "/" + notUniqURL,
 				executeCount: 1,
 			},
 		},
@@ -233,7 +235,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 			var executedCount = 0
 
 			newGenerateURL := NewGenerateURL(mockRandStr(&executedCount, tt.mockRand), tt.storage)
-			uniqURL, err := newGenerateURL.GenerateAndSetUniqURL(t.Context(), tt.newOriginal)
+			uniqURL, err := newGenerateURL.GenerateAndSetUniqURL(t.Context(), tt.newOriginal, userID, baseURL)
 
 			if tt.want.err != "" {
 				require.ErrorContains(t, err, tt.want.err)
@@ -246,7 +248,7 @@ func TestGenerateAndSetUniqURL(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err)
-				assert.Len(t, []rune(uniqURL), 8)
+				assert.Len(t, []rune(uniqURL), 30)
 				if _, ok := tt.storage.(*model.DBURL); ok {
 					require.NoError(t, mock.ExpectationsWereMet())
 				}

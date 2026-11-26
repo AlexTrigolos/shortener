@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -87,7 +88,19 @@ func (a App) RunApp() error {
 	if URLErr != nil {
 		return logAndReturnError(logger, URLErr)
 	}
-	r := router.NewGenerateRouter(URLs)
+
+	doneCh := make(chan struct{})
+	deleter, finishCh := model.NewDeleter(doneCh, URLs, logger)
+	defer func() {
+		close(doneCh)
+
+		select {
+		case <-finishCh:
+		case <-time.After(5 * time.Second):
+			logger.Info("При завершении не дождались закрытия удалителя")
+		}
+	}()
+	r := router.NewGenerateRouter(URLs, deleter)
 
 	rtr, err := r.GenerateRoute(flags.BaseURL, server)
 	if err != nil {
