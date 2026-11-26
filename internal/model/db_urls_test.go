@@ -9,6 +9,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/lib/pq"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jackc/pgerrcode"
@@ -17,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const(
-	dbUserID = "user_id"
+const (
+	dbUserID  = "user_id"
 	dbBaseURL = "http://base_url.org"
 )
 
@@ -78,7 +79,7 @@ func TestDBURL_Set(t *testing.T) {
 		{
 			name:              "ошибка добавления конфликт значений",
 			willSuccessReturn: nil,
-			willFailReturn:    &pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "уникальности ошибку ты получил", ConstraintName: "idx_urls_original"},
+			willFailReturn:    &pgconn.PgError{Code: pgerrcode.UniqueViolation, Message: "уникальности ошибку ты получил", ConstraintName: "uniq_original_not_deleted"},
 			wantErr:           "conflict",
 		},
 	}
@@ -121,7 +122,7 @@ func TestDBURL_Get(t *testing.T) {
 	}{
 		{
 			name:              "удачное получение",
-			willSuccessReturn: sqlmock.NewRows([]string{"original"}).AddRow("url_value"),
+			willSuccessReturn: sqlmock.NewRows([]string{"original", "delete_flag"}).AddRow("url_value", "false"),
 			willFailReturn:    nil,
 			wantErr:           "",
 		},
@@ -130,6 +131,12 @@ func TestDBURL_Get(t *testing.T) {
 			willSuccessReturn: nil,
 			willFailReturn:    errors.New("some db error"),
 			wantErr:           "some db error",
+		},
+		{
+			name:              "удален",
+			willSuccessReturn: sqlmock.NewRows([]string{"original", "delete_flag"}).AddRow("url_value", "true"),
+			willFailReturn:    nil,
+			wantErr:           "deleted",
 		},
 	}
 	for _, tt := range tests {
@@ -144,11 +151,11 @@ func TestDBURL_Get(t *testing.T) {
 			key := "abc"
 
 			if tt.willFailReturn == nil {
-				mock.ExpectQuery("SELECT original FROM urls WHERE short = \\$1").
+				mock.ExpectQuery("SELECT original, delete_flag FROM urls WHERE short = \\$1").
 					WithArgs(key).
 					WillReturnRows(tt.willSuccessReturn)
 			} else {
-				mock.ExpectQuery("SELECT original FROM urls WHERE short = \\$1").
+				mock.ExpectQuery("SELECT original, delete_flag FROM urls WHERE short = \\$1").
 					WithArgs(key).
 					WillReturnError(tt.willFailReturn)
 			}
@@ -198,11 +205,11 @@ func TestDBURL_GetByOriginal(t *testing.T) {
 			value := "original_value"
 
 			if tt.willFailReturn == nil {
-				mock.ExpectQuery("SELECT short FROM urls WHERE original = \\$1").
+				mock.ExpectQuery("SELECT short FROM urls WHERE original = \\$1 AND delete_flag = FALSE").
 					WithArgs(value).
 					WillReturnRows(tt.willSuccessReturn)
 			} else {
-				mock.ExpectQuery("SELECT short FROM urls WHERE original = \\$1").
+				mock.ExpectQuery("SELECT short FROM urls WHERE original = \\$1 AND delete_flag = FALSE").
 					WithArgs(value).
 					WillReturnError(tt.willFailReturn)
 			}
@@ -210,7 +217,7 @@ func TestDBURL_GetByOriginal(t *testing.T) {
 			key, err := dbu.GetByOriginal(ctx, value, dbBaseURL)
 			if tt.wantErr == "" {
 				require.NoError(t, err)
-				assert.Equal(t, dbBaseURL + "/short_url", key)
+				assert.Equal(t, dbBaseURL+"/short_url", key)
 			} else {
 				require.ErrorContains(t, err, tt.wantErr)
 				assert.Equal(t, "", key)
@@ -252,11 +259,11 @@ func TestDBURL_GetByUserID(t *testing.T) {
 			userID := "user_id"
 
 			if tt.willFailReturn == nil {
-				mock.ExpectQuery("SELECT short, original FROM urls WHERE user_id = \\$1").
+				mock.ExpectQuery("SELECT short, original FROM urls WHERE user_id = \\$1 AND delete_flag = FALSE").
 					WithArgs(userID).
 					WillReturnRows(tt.willSuccessReturn)
 			} else {
-				mock.ExpectQuery("SELECT short, original FROM urls WHERE user_id = \\$1").
+				mock.ExpectQuery("SELECT short, original FROM urls WHERE user_id = \\$1 AND delete_flag = FALSE").
 					WithArgs(userID).
 					WillReturnError(tt.willFailReturn)
 			}
@@ -273,6 +280,64 @@ func TestDBURL_GetByUserID(t *testing.T) {
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+func TestDBURL_CheckUserIDURLs(t *testing.T) {
+	tests := []struct {
+		name      string
+		resShorts int
+		wantErr   string
+	}{
+		{
+			name:      "удачная проверка урлов пользователя",
+			resShorts: 2,
+			wantErr:   "",
+		},
+		{
+			name:      "не все урлы его",
+			resShorts: 0,
+			wantErr:   "не все переданные urls принадлежат пользователю",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+
+			dbu := &DBURL{db: db}
+
+			urls := []string{"short_url", "short_url_2"}
+			mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM urls WHERE user_id = \\$1 AND short = ANY\\(\\$2\\)").
+				WithArgs(dbUserID, pq.Array(urls)).
+				WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(tt.resShorts))
+			err = dbu.CheckUserIDURLs(t.Context(), urls, dbUserID)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tt.wantErr)
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestDBURL_DeleteURLs(t *testing.T) {
+	t.Run("удачное удаление", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		dbu := &DBURL{db: db}
+
+		urls := []URLsData{{Urls: []string{"short_url"}, UserID: "user_id"}, {Urls: []string{"short_url_2"}, UserID: "user_id_2"}}
+		mock.ExpectExec("UPDATE urls SET delete_flag = TRUE WHERE short = ANY\\(\\$1\\)").
+			WithArgs(pq.Array([]string{"short_url", "short_url_2"})).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		err = dbu.DeleteURLs(t.Context(), urls)
+		require.NoError(t, err)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
 func TestDBURL_Begin(t *testing.T) {

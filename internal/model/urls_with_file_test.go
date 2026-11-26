@@ -195,6 +195,13 @@ func TestURLWithFile_Get(t *testing.T) {
 			wantVal: "",
 			wantErr: "не найден ключ key1",
 		},
+		{
+			name:    "удален ключ",
+			urls:    &URLWithFile{URL: &URL{deleteFlag: map[string]struct{}{"key_del": {}}}},
+			key:     "key_del",
+			wantVal: "",
+			wantErr: "deleted",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -266,7 +273,7 @@ func TestURLWithFile_GetByUserID(t *testing.T) {
 			name:     "не находит ключ по значению",
 			urls:     &URLWithFile{URL: &URL{byUserIds: map[string][]UserURL{}}},
 			userID:  "unknown_user_id",
-			wantURLs: nil,
+			wantURLs: []UserURL{},
 		},
 	}
 	for _, tt := range tests {
@@ -388,7 +395,6 @@ func TestURLWithFile_Commit(t *testing.T) {
 		assert.Len(t, uwf.URL.byUserIds, 1)
 		assert.Contains(t, uwf.URL.byUserIds, uUserID)
 		assert.Len(t, uwf.URL.byUserIds[uUserID], 2)
-		assert.Contains(t, uwf.URL.byUserIds, uUserID)
 		assert.Contains(t, uwf.URL.byUserIds[uUserID], UserURL{ShortURL: "short_1", OriginalURL: "long_1"})
 		assert.Contains(t, uwf.URL.byUserIds[uUserID], UserURL{ShortURL: "short_2", OriginalURL: "long_2"})
 

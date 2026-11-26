@@ -20,16 +20,24 @@ type GetterSetterWithConflictDBReady interface {
 	GetByOriginal(ctx context.Context, original, baseURL string) (string, error)
 	GetByUserID(_ context.Context, userID, baseURL string) (*[]model.UserURL, error)
 
+	CheckUserIDURLs(ctx context.Context, urls []string, userID string) error
+	DeleteURLs(ctx context.Context, urls []model.URLsData) error
+
 	PingContext(ctx context.Context) error
 	Begin(count int) (*model.Transaction, error)
 }
 
-type GenerateRouter struct {
-	URLs GetterSetterWithConflictDBReady
+type AddDelURLs interface {
+	AddURLs(urls []string, userID string)
 }
 
-func NewGenerateRouter(nu GetterSetterWithConflictDBReady) *GenerateRouter {
-	return &GenerateRouter{URLs: nu}
+type GenerateRouter struct {
+	URLs    GetterSetterWithConflictDBReady
+	deleter AddDelURLs
+}
+
+func NewGenerateRouter(nu GetterSetterWithConflictDBReady, deleter AddDelURLs) *GenerateRouter {
+	return &GenerateRouter{URLs: nu, deleter: deleter}
 }
 
 func (gr *GenerateRouter) GenerateRoute(baseURL string, server *config.Server) (chi.Router, error) {
@@ -51,10 +59,11 @@ func (gr *GenerateRouter) GenerateRoute(baseURL string, server *config.Server) (
 		r.Post("/", compact.CompactHandler(baseURL))
 		r.Get("/ping", ping.PingHandler())
 		r.Route("/{id}", func(r chi.Router) {
-			r.Get("/", handler.GetHandler(gr.URLs))
+			r.Get("/", handler.GetHandler(gr.URLs, server.Logger))
 		})
 		r.Route("/api", func(r chi.Router) {
 			r.Get("/user/urls", api_handler.GetUserURLsHandler(baseURL, gr.URLs, server.Logger))
+			r.Delete("/user/urls", api_handler.DeleteUserURLsHandler(gr.URLs, gr.deleter, server.Logger))
 			r.Route("/shorten", func(r chi.Router) {
 				r.Post("/", apiCompact.CompactHandler(baseURL))
 				r.Post("/batch", apiBatchCompact.BatchCompactHandler(baseURL))

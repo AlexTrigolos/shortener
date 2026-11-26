@@ -23,6 +23,7 @@ func TestNewURL(t *testing.T) {
 			values:            map[string]string{},
 			transactionBuffer: nil,
 			byUserIds:         map[string][]UserURL{},
+			deleteFlag: 	   map[string]struct{}{},
 			transactionUserID: "",
 		}, newURL)
 	})
@@ -78,7 +79,7 @@ func TestURL_Set(t *testing.T) {
 }
 
 func TestURL_Get(t *testing.T) {
-	urls := &URL{data: map[string]string{"key1": "value1"}}
+	urls := &URL{data: map[string]string{"key1": "value1"}, deleteFlag: map[string]struct{}{"key_del": {}}}
 	tests := []struct {
 		name    string
 		key     string
@@ -96,6 +97,12 @@ func TestURL_Get(t *testing.T) {
 			key:     "key0",
 			wantVal: "",
 			wantErr: "не найден ключ key0",
+		},
+		{
+			name:    "ключ удален",
+			key:     "key_del",
+			wantVal: "",
+			wantErr: "deleted",
 		},
 	}
 	for _, tt := range tests {
@@ -148,7 +155,6 @@ func TestURL_GetByOriginal(t *testing.T) {
 }
 
 func TestURL_GetByUserID(t *testing.T) {
-	urls := &URL{byUserIds: map[string][]UserURL{uUserID: {{ShortURL: "key1", OriginalURL: "value1"}}}}
 	tests := []struct {
 		name     string
 		userID  string
@@ -162,16 +168,33 @@ func TestURL_GetByUserID(t *testing.T) {
 		{
 			name:     "не находит ключ по значению",
 			userID:  "unknown_user_id",
-			wantURLs: nil,
+			wantURLs: []UserURL{},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			urls := &URL{byUserIds: map[string][]UserURL{uUserID: {{ShortURL: "key1", OriginalURL: "value1"}}}}
 			userURls, err := urls.GetByUserID(t.Context(), tt.userID, uBaseURL)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantURLs, *userURls)
 		})
 	}
+	t.Run("двойное чтение с удалением", func(t *testing.T) {
+		urls := &URL{byUserIds: map[string][]UserURL{uUserID: {{ShortURL: "key1", OriginalURL: "value1"}}}}
+		wantURLs := []UserURL{{ShortURL: uBaseURL + "/key1", OriginalURL: "value1"}}
+
+		userURls, err := urls.GetByUserID(t.Context(), uUserID, uBaseURL)
+		require.NoError(t, err)
+		assert.Equal(t, wantURLs, *userURls)
+
+		userURls, err = urls.GetByUserID(t.Context(), uUserID, uBaseURL)
+		require.NoError(t, err)
+		assert.Equal(t, wantURLs, *userURls)
+
+		assert.Len(t, urls.byUserIds[uUserID], 1)
+		urls.delete("key1", uUserID)
+		assert.Len(t, urls.byUserIds[uUserID], 0)
+	})
 }
 
 func Test_delete(t *testing.T) {
@@ -276,8 +299,8 @@ func TestURL_Commit(t *testing.T) {
 		assert.Len(t, urls.byUserIds, 1)
 		assert.Contains(t, urls.byUserIds, uUserID)
 		assert.Len(t, urls.byUserIds[uUserID], 2)
-		assert.Contains(t, urls.byUserIds, uUserID)
-		assert.Equal(t, urls.byUserIds[uUserID], []UserURL{{ShortURL: "short_1", OriginalURL: "long_1"}, {ShortURL: "short_2", OriginalURL: "long_2"}})
+		assert.Contains(t, urls.byUserIds[uUserID], UserURL{ShortURL: "short_1", OriginalURL: "long_1"})
+		assert.Contains(t, urls.byUserIds[uUserID], UserURL{ShortURL: "short_2", OriginalURL: "long_2"})
 	})
 	t.Run("совпадение при завершении транзакции", func(t *testing.T) {
 		urls := &URL{
